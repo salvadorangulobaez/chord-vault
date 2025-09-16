@@ -55,7 +55,9 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
           ),
         ],
       ),
-      body: ReorderableListView.builder(
+      body: note.songs.isEmpty
+          ? const _EmptyNotePlaceholder()
+          : ReorderableListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: note.songs.length,
         buildDefaultDragHandles: false,
@@ -736,19 +738,42 @@ class _LibraryPickerSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final songs = ref.watch(libraryProvider);
-    final notes = ref.read(notesProvider);
-    // Asumimos que estamos insertando en la última nota abierta; pedimos via Navigator
+    final query = ref.watch(_libPickerSearchProvider);
+    final q = query.trim().toLowerCase();
+    final filtered = q.isEmpty
+        ? songs
+        : songs.where((s) => s.title.toLowerCase().contains(q) || (s.tags.join(' ').toLowerCase().contains(q))).toList();
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.9,
       builder: (_, controller) {
         return Scaffold(
-          appBar: AppBar(title: const Text('Insertar desde biblioteca')),
+          appBar: AppBar(
+            title: SizedBox(
+              height: 40,
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: 'Buscar en biblioteca',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: query.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () => ref.read(_libPickerSearchProvider.notifier).state = '',
+                        )
+                      : null,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                onChanged: (v) => ref.read(_libPickerSearchProvider.notifier).state = v,
+              ),
+            ),
+          ),
           body: ListView.builder(
             controller: controller,
-            itemCount: songs.length,
+            itemCount: filtered.length,
             itemBuilder: (context, index) {
-              final s = songs[index];
+              final s = filtered[index];
               return ListTile(
                 title: Text(s.title),
                 subtitle: Text(s.originalKey ?? ''),
@@ -761,6 +786,38 @@ class _LibraryPickerSheet extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+final _libPickerSearchProvider = StateProvider<String>((ref) => '');
+
+class _EmptyNotePlaceholder extends StatelessWidget {
+  const _EmptyNotePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.library_music, size: 64, color: Theme.of(context).colorScheme.primary.withOpacity(0.8)),
+            const SizedBox(height: 12),
+            Text(
+              'Tu nota está vacía',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Tocá el botón + para añadir una canción o insertar desde la biblioteca.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
