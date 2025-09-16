@@ -274,6 +274,29 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final picked = await showModalBottomSheet<Song>(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (_) => const _LibraryPickerSheet(),
+                      );
+                      if (picked != null) {
+                        final updated = Note(
+                          id: note.id,
+                          title: note.title,
+                          createdAt: note.createdAt,
+                          updatedAt: DateTime.now(),
+                          songs: [...note.songs, picked],
+                        );
+                        ref.read(notesProvider.notifier).upsert(updated);
+                        setState(() {});
+                      }
+                    },
+                    icon: const Icon(Icons.library_add),
+                    label: const Text('Insertar de biblioteca'),
+                  ),
+                  const SizedBox(width: 8),
                   IconButton(
                     onPressed: () => ref.read(clipboardSongAvailableProvider.notifier).state = false,
                     icon: const Icon(Icons.close),
@@ -341,6 +364,20 @@ class _SongCard extends StatelessWidget {
                       case 'duplicate':
                         onDuplicate();
                         break;
+                      case 'save_library':
+                        ref.read(libraryProvider.notifier).upsert(Song(
+                          id: HiveService.newId(),
+                          title: song.title,
+                          blocks: [for (final b in song.blocks) Block(id: HiveService.newId(), type: b.type, content: b.content)],
+                          originalKey: song.originalKey,
+                          tags: song.tags,
+                          author: song.author,
+                          isFavorite: song.isFavorite,
+                        ));
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Guardada en biblioteca')));
+                        }
+                        break;
                       case 'delete':
                         onDelete();
                         break;
@@ -349,6 +386,7 @@ class _SongCard extends StatelessWidget {
                   itemBuilder: (context) => const [
                     PopupMenuItem(value: 'copy', child: Text('Copiar')),
                     PopupMenuItem(value: 'duplicate', child: Text('Duplicar')),
+                    PopupMenuItem(value: 'save_library', child: Text('Guardar en biblioteca')),
                     PopupMenuItem(value: 'delete', child: Text('Eliminar')),
                   ],
                 ),
@@ -646,3 +684,37 @@ class _SongEditorSheetState extends ConsumerState<_SongEditorSheet> {
 }
 
 
+class _LibraryPickerSheet extends ConsumerWidget {
+  const _LibraryPickerSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final songs = ref.watch(libraryProvider);
+    final notes = ref.read(notesProvider);
+    // Asumimos que estamos insertando en la última nota abierta; pedimos via Navigator
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.9,
+      builder: (_, controller) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Insertar desde biblioteca')),
+          body: ListView.builder(
+            controller: controller,
+            itemCount: songs.length,
+            itemBuilder: (context, index) {
+              final s = songs[index];
+              return ListTile(
+                title: Text(s.title),
+                subtitle: Text(s.originalKey ?? ''),
+                onTap: () {
+                  // devolver la canción seleccionada
+                  Navigator.pop(context, s);
+                },
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
