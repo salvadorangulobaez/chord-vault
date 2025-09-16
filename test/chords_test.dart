@@ -35,6 +35,14 @@ void main() {
       expect(out, 'A#m7b5/B');
     });
 
+    test('Transposición de tono menor en título', () {
+      // Usa la API de transposeKey a través de display helper
+      final out = transposeKey('Am', 2, preferSharps: true);
+      expect(out, 'Bm');
+      final out2 = transposeKey('F#m', -1, preferSharps: false);
+      expect(out2, 'Fm');
+    });
+
     test('Subacordes con guiones se transponen todos', () {
       final out = transposeToken('F#5b-F', 2, const TransposeOptions(preferSharps: true));
       expect(out, 'G#5b-G');

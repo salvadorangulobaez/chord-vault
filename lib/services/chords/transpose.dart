@@ -79,6 +79,23 @@ String? transposeRootNote(String note, int semitones, {required bool preferSharp
   return _indexToNote(idx + semitones, preferSharps: preferSharps);
 }
 
+final RegExp _minorKeyRegex = RegExp(r'^([A-G](?:#|b|♯|♭)?)(m)$');
+
+/// Transpone un tono de canción que puede incluir modo menor (ej.: Am, F#m).
+String transposeKey(String key, int semitones, {required bool preferSharps}) {
+  final trimmed = key.trim();
+  final mm = _minorKeyRegex.firstMatch(trimmed);
+  String root = trimmed;
+  String suffix = '';
+  if (mm != null) {
+    root = mm.group(1)!;
+    suffix = mm.group(2)!; // conserva 'm'
+  }
+  final t = transposeRootNote(root, semitones, preferSharps: preferSharps);
+  if (t == null) return key;
+  return t + suffix;
+}
+
 class ChordTokenParsed {
   ChordTokenParsed({required this.root, required this.suffix, this.bass});
   final String root; // e.g. D, F#, Bb

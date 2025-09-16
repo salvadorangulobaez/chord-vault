@@ -380,7 +380,7 @@ String _displayTitleWithKey(String title, String? originalKey, int semitones, {r
     key ??= match.group(2)!.trim();
   }
   if (key == null || key.isEmpty) return baseTitle;
-  final transposed = transposeRootNote(key, semitones, preferSharps: preferSharps) ?? key;
+  final transposed = transposeKey(key, semitones, preferSharps: preferSharps);
   return baseTitle.isEmpty ? transposed : baseTitle + ' (' + transposed + ')';
 }
 
