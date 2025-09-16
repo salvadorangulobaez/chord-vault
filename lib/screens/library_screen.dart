@@ -5,6 +5,7 @@ import '../providers/app_providers.dart';
 import '../models/song.dart';
 import '../models/block.dart';
 import '../services/storage/hive_service.dart';
+import '../services/io/text_format.dart';
 
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
@@ -80,6 +81,32 @@ class LibraryScreen extends ConsumerWidget {
                 isScrollControlled: true,
                 builder: (_) => _LibrarySongEditor(song: song, isNew: true),
               );
+            },
+          ),
+          IconButton(
+            tooltip: 'Importar (pegar)',
+            icon: const Icon(Icons.input),
+            onPressed: () async {
+              final text = await showDialog<String>(
+                context: context,
+                builder: (_) {
+                  final ctrl = TextEditingController();
+                  return AlertDialog(
+                    title: const Text('Pegar canciones'),
+                    content: TextField(controller: ctrl, maxLines: 10),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+                      TextButton(onPressed: () => Navigator.pop(context, ctrl.text), child: const Text('Importar')),
+                    ],
+                  );
+                },
+              );
+              if (text != null && text.trim().isNotEmpty) {
+                final parsed = TextFormat.parseSongs(text, idGen: () => HiveService.newId());
+                for (final s in parsed) {
+                  ref.read(libraryProvider.notifier).upsert(s);
+                }
+              }
             },
           ),
         ],
