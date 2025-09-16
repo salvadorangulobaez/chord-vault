@@ -332,7 +332,7 @@ class _SongCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              song.title,
+              _displayTitleWithKey(song.title, song.originalKey, _transposeBySong[song.id] ?? 0, preferSharps: settings.preferSharps),
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                     fontSize: (Theme.of(context).textTheme.titleMedium?.fontSize ?? 16) + 1,
@@ -368,6 +368,20 @@ class _SongCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _displayTitleWithKey(String title, String? originalKey, int semitones, {required bool preferSharps}) {
+  // Si no hay tono definido, intenta detectar uno entre paréntesis ya existente.
+  String baseTitle = title;
+  String? key = originalKey;
+  final match = RegExp(r"^(.*)\(([^)]+)\)\s*$").firstMatch(title);
+  if (match != null) {
+    baseTitle = match.group(1)!.trim();
+    key ??= match.group(2)!.trim();
+  }
+  if (key == null || key.isEmpty) return baseTitle;
+  final transposed = transposeRootNote(key, semitones, preferSharps: preferSharps) ?? key;
+  return baseTitle.isEmpty ? transposed : baseTitle + ' (' + transposed + ')';
 }
 
 class _ChordBlockView extends StatelessWidget {
@@ -419,11 +433,13 @@ class _SongEditorSheet extends ConsumerStatefulWidget {
 
 class _SongEditorSheetState extends ConsumerState<_SongEditorSheet> {
   late TextEditingController _titleCtrl;
+  late TextEditingController _keyCtrl;
   late List<Block> _blocks;
   @override
   void initState() {
     super.initState();
     _titleCtrl = TextEditingController(text: widget.song.title);
+    _keyCtrl = TextEditingController(text: widget.song.originalKey ?? '');
     _blocks = widget.song.blocks
         .map((b) => Block(id: b.id, type: b.type, content: b.content))
         .toList();
@@ -432,6 +448,7 @@ class _SongEditorSheetState extends ConsumerState<_SongEditorSheet> {
   @override
   void dispose() {
     _titleCtrl.dispose();
+    _keyCtrl.dispose();
     super.dispose();
   }
 
@@ -440,7 +457,7 @@ class _SongEditorSheetState extends ConsumerState<_SongEditorSheet> {
       id: song.id,
       title: title,
       blocks: blocks,
-      originalKey: song.originalKey,
+      originalKey: _keyCtrl.text.trim().isEmpty ? null : _keyCtrl.text.trim(),
       tags: song.tags,
       author: song.author,
       isFavorite: song.isFavorite,
@@ -489,6 +506,11 @@ class _SongEditorSheetState extends ConsumerState<_SongEditorSheet> {
                 TextField(
                   controller: _titleCtrl,
                   decoration: const InputDecoration(labelText: 'Título de la canción'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _keyCtrl,
+                  decoration: const InputDecoration(labelText: 'Tono (ej. D, Bb, F#)'),
                 ),
                 const SizedBox(height: 8),
                 ReorderableListView.builder(

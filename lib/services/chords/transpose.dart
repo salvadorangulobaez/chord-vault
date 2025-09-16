@@ -19,6 +19,9 @@ const List<String> _chromaticFlats = [
   'C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'
 ];
 
+List<String> chromaticScale({required bool preferSharps}) =>
+    List<String>.from(preferSharps ? _chromaticSharps : _chromaticFlats);
+
 // Normaliza ♯/♭ a #/b, y equivalentes enharmónicos Cb, B#, E#, Fb a índices
 int? _noteToIndex(String raw) {
   String s = raw
@@ -67,6 +70,13 @@ int? _noteToIndex(String raw) {
 String _indexToNote(int index, {required bool preferSharps}) {
   final i = (index % 12 + 12) % 12;
   return preferSharps ? _chromaticSharps[i] : _chromaticFlats[i];
+}
+
+/// Transpone una nota raíz (sin sufijos) según semitonos y preferencia de notación.
+String? transposeRootNote(String note, int semitones, {required bool preferSharps}) {
+  final idx = _noteToIndex(note);
+  if (idx == null) return null;
+  return _indexToNote(idx + semitones, preferSharps: preferSharps);
 }
 
 class ChordTokenParsed {
