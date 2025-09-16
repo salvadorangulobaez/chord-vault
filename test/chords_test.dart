@@ -35,6 +35,13 @@ void main() {
       expect(out, 'A#m7b5/B');
     });
 
+    test('Subacordes con guiones se transponen todos', () {
+      final out = transposeToken('F#5b-F', 2, const TransposeOptions(preferSharps: true));
+      expect(out, 'G#5b-G');
+      final out2 = transposeToken('A-Bbm7b5-E/B', -1, const TransposeOptions(preferSharps: false));
+      // A(-1)->Ab, Bbm7b5(-1)->Am7b5, E/B(-1)->Eb/Bb
+      expect(out2, 'Ab-Am7b5-Eb/Bb');
+    });
     test('Preferencia de bemoles', () {
       final out = transposeToken('F#', 1, const TransposeOptions(preferSharps: false));
       expect(out, 'G');

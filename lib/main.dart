@@ -19,9 +19,11 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Cancionero',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.indigo,
+          brightness: Brightness.dark,
+        ),
         useMaterial3: true,
-        brightness: Brightness.dark,
       ),
       home: const HomeScreen(),
     );

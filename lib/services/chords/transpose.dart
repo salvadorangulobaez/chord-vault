@@ -106,6 +106,19 @@ ChordTokenParsed? parseChordToken(String token) {
 }
 
 String transposeToken(String token, int semitones, TransposeOptions options) {
+  // Si el token contiene subacordes unidos con '-', transponer cada parte.
+  if (token.contains('-')) {
+    final parts = token.split('-');
+    final transposed = parts.map((p) {
+      final single = _transposeSingleToken(p, semitones, options);
+      return single;
+    }).toList();
+    return transposed.join('-');
+  }
+  return _transposeSingleToken(token, semitones, options);
+}
+
+String _transposeSingleToken(String token, int semitones, TransposeOptions options) {
   final parsed = parseChordToken(token);
   if (parsed == null) return token;
   final rootIdx = _noteToIndex(parsed.root);

@@ -4,6 +4,7 @@ import 'package:hive/hive.dart';
 enum BlockType {
   text,
   chords,
+  note,
 }
 
 /// Bloque de contenido: texto o acordes

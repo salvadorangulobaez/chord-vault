@@ -43,6 +43,11 @@ class NotesController extends StateNotifier<List<Note>> {
     }
     HiveService.notesBox.put(note.id, note);
   }
+
+  void delete(String noteId) {
+    HiveService.notesBox.delete(noteId);
+    state = state.where((n) => n.id != noteId).toList();
+  }
 }
 
 final libraryProvider = StateNotifierProvider<LibraryController, List<Song>>((ref) {
