@@ -8,11 +8,30 @@ import 'note_editor_screen.dart';
 import 'library_screen.dart';
 import 'help_screen.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Cargar preferencia persistida de vista (lista/mosaico) sin modificar durante build
+    final persisted = HiveService.settingsBox.get('gridView') as bool?;
+    if (persisted != null) {
+      final s = ref.read(settingsProvider);
+      if (s.gridView != persisted) {
+        ref.read(settingsProvider.notifier).state = s.copyWith(gridView: persisted);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ref = this.ref;
     final notes = ref.watch(notesProvider);
     final settings = ref.watch(settingsProvider);
     final viewAsGrid = settings.gridView; // false=list, true=grid
