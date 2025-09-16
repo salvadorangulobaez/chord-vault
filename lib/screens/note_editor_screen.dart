@@ -199,16 +199,29 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 ref.read(notesProvider.notifier).upsert(updated);
                 setState(() {});
               },
-              onDelete: () {
-                final updated = Note(
-                  id: note.id,
-                  title: note.title,
-                  createdAt: note.createdAt,
-                  updatedAt: DateTime.now(),
-                  songs: [for (final s in note.songs) if (s.id != song.id) s],
+              onDelete: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Eliminar canción'),
+                    content: Text('¿Eliminar "' + song.title + '" de esta nota?'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+                      TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Eliminar')),
+                    ],
+                  ),
                 );
-                ref.read(notesProvider.notifier).upsert(updated);
-                setState(() {});
+                if (confirm == true) {
+                  final updated = Note(
+                    id: note.id,
+                    title: note.title,
+                    createdAt: note.createdAt,
+                    updatedAt: DateTime.now(),
+                    songs: [for (final s in note.songs) if (s.id != song.id) s],
+                  );
+                  ref.read(notesProvider.notifier).upsert(updated);
+                  setState(() {});
+                }
               },
               onSaveToLibrary: () {
                 final libSong = Song(

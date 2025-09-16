@@ -91,13 +91,39 @@ class LibraryScreen extends ConsumerWidget {
           return ListTile(
             title: Text(s.title),
             subtitle: Text(s.originalKey ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
-            onTap: () async {
-              await showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => _LibrarySongEditor(song: s, isNew: false),
-              );
-            },
+            trailing: PopupMenuButton<String>(
+              onSelected: (v) async {
+                switch (v) {
+                  case 'edit':
+                    await showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (_) => _LibrarySongEditor(song: s, isNew: false),
+                    );
+                    break;
+                  case 'delete':
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        title: const Text('Eliminar canción de biblioteca'),
+                        content: Text('¿Eliminar "' + s.title + '" de la biblioteca?'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+                          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Eliminar')),
+                        ],
+                      ),
+                    );
+                    if (confirm == true) {
+                      ref.read(libraryProvider.notifier).delete(s.id);
+                    }
+                    break;
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'edit', child: Text('Editar')),
+                PopupMenuItem(value: 'delete', child: Text('Eliminar')),
+              ],
+            ),
           );
         },
       ),
