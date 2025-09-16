@@ -44,113 +44,152 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
           },
         ),
       ),
-      body: ListView(
+      body: ReorderableListView.builder(
         padding: const EdgeInsets.all(12),
-        children: [
-          for (final song in note.songs) _SongCard(
-            song: song,
-            semitones: _transposeBySong[song.id] ?? 0,
-            onTranspose: (delta) {
-              setState(() {
-                _transposeBySong[song.id] = (_transposeBySong[song.id] ?? 0) + delta;
-              });
-            },
-            onReset: () {
-              setState(() {
-                _transposeBySong[song.id] = 0;
-              });
-            },
-            onApplyPermanently: () {
-              final semitones = _transposeBySong[song.id] ?? 0;
-              if (semitones == 0) return;
-              final updatedBlocks = song.blocks.map((b) {
-                if (b.type == BlockType.chords) {
-                  final lines = b.content.split('\n');
-                  final out = lines.map((line) {
-                    final tokens = parseLineToTokens(line);
-                    return tokens
-                        .map((t) => t.isChord
-                            ? transposeToken(t.raw, semitones, TransposeOptions(preferSharps: settings.preferSharps))
-                            : t.raw)
-                        .join(' ');
-                  }).join('\n');
-                  return Block(id: b.id, type: b.type, content: out);
+        itemCount: note.songs.length,
+        buildDefaultDragHandles: false,
+        proxyDecorator: (child, index, animation) {
+          return Material(
+            color: Colors.transparent,
+            child: AnimatedBuilder(
+              animation: animation,
+              builder: (context, _) => Opacity(
+                opacity: 0.9,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: child,
+                ),
+              ),
+            ),
+          );
+        },
+        onReorder: (oldIndex, newIndex) {
+          if (newIndex > oldIndex) newIndex--;
+          final newSongs = [...note.songs];
+          final moved = newSongs.removeAt(oldIndex);
+          newSongs.insert(newIndex, moved);
+          final updated = Note(
+            id: note.id,
+            title: note.title,
+            createdAt: note.createdAt,
+            updatedAt: DateTime.now(),
+            songs: newSongs,
+          );
+          ref.read(notesProvider.notifier).upsert(updated);
+          setState(() {});
+        },
+        itemBuilder: (context, index) {
+          final song = note.songs[index];
+          return ReorderableDelayedDragStartListener(
+            key: ValueKey(song.id),
+            index: index,
+            child: _SongCard(
+              song: song,
+              semitones: _transposeBySong[song.id] ?? 0,
+              onTranspose: (delta) {
+                setState(() {
+                  _transposeBySong[song.id] = (_transposeBySong[song.id] ?? 0) + delta;
+                });
+              },
+              onReset: () {
+                setState(() {
+                  _transposeBySong[song.id] = 0;
+                });
+              },
+              onApplyPermanently: () {
+                final semitones = _transposeBySong[song.id] ?? 0;
+                if (semitones == 0) return;
+                final updatedBlocks = song.blocks.map((b) {
+                  if (b.type == BlockType.chords) {
+                    final lines = b.content.split('\n');
+                    final out = lines.map((line) {
+                      final tokens = parseLineToTokens(line);
+                      return tokens
+                          .map((t) => t.isChord
+                              ? transposeToken(t.raw, semitones, TransposeOptions(preferSharps: settings.preferSharps))
+                              : t.raw)
+                          .join(' ');
+                    }).join('\n');
+                    return Block(id: b.id, type: b.type, content: out);
+                  }
+                  return b;
+                }).toList();
+                final updatedSong = Song(
+                  id: song.id,
+                  title: song.title,
+                  blocks: updatedBlocks,
+                  originalKey: song.originalKey,
+                  tags: song.tags,
+                  author: song.author,
+                  isFavorite: song.isFavorite,
+                );
+                final updatedNote = Note(
+                  id: note.id,
+                  title: note.title,
+                  createdAt: note.createdAt,
+                  updatedAt: DateTime.now(),
+                  songs: [
+                    for (final s in note.songs) if (s.id == song.id) updatedSong else s
+                  ],
+                );
+                ref.read(notesProvider.notifier).upsert(updatedNote);
+                setState(() {
+                  _transposeBySong[song.id] = 0;
+                });
+              },
+              preferSharps: settings.preferSharps,
+              onEditSong: () async {
+                await showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (_) => _SongEditorSheet(note: note, song: song),
+                );
+                setState(() {});
+              },
+              onCopy: () async {
+                await copySongToClipboard(song);
+                ref.read(clipboardSongAvailableProvider.notifier).state = true;
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Canción copiada')));
                 }
-                return b;
-              }).toList();
-              final updatedSong = Song(
-                id: song.id,
-                title: song.title,
-                blocks: updatedBlocks,
-                originalKey: song.originalKey,
-                tags: song.tags,
-                author: song.author,
-                isFavorite: song.isFavorite,
-              );
-              final updatedNote = Note(
-                id: note.id,
-                title: note.title,
-                createdAt: note.createdAt,
-                updatedAt: DateTime.now(),
-                songs: [
-                  for (final s in note.songs) if (s.id == song.id) updatedSong else s
-                ],
-              );
-              ref.read(notesProvider.notifier).upsert(updatedNote);
-              setState(() {
-                _transposeBySong[song.id] = 0;
-              });
-            },
-            preferSharps: settings.preferSharps,
-            onEditSong: () async {
-              await showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => _SongEditorSheet(note: note, song: song),
-              );
-              setState(() {});
-            },
-            onCopy: () async {
-              await copySongToClipboard(song);
-              ref.read(clipboardSongAvailableProvider.notifier).state = true;
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Canción copiada')));
-              }
-            },
-            onDuplicate: () {
-              final newSong = Song(
-                id: HiveService.newId(),
-                title: song.title + ' (copia)',
-                blocks: [for (final b in song.blocks) Block(id: HiveService.newId(), type: b.type, content: b.content)],
-                originalKey: song.originalKey,
-                tags: song.tags,
-                author: song.author,
-                isFavorite: song.isFavorite,
-              );
-              final updated = Note(
-                id: note.id,
-                title: note.title,
-                createdAt: note.createdAt,
-                updatedAt: DateTime.now(),
-                songs: [...note.songs, newSong],
-              );
-              ref.read(notesProvider.notifier).upsert(updated);
-              setState(() {});
-            },
-            onDelete: () {
-              final updated = Note(
-                id: note.id,
-                title: note.title,
-                createdAt: note.createdAt,
-                updatedAt: DateTime.now(),
-                songs: [for (final s in note.songs) if (s.id != song.id) s],
-              );
-              ref.read(notesProvider.notifier).upsert(updated);
-              setState(() {});
-            },
-          ),
-          const SizedBox(height: 100),
-        ],
+              },
+              onDuplicate: () {
+                final newSong = Song(
+                  id: HiveService.newId(),
+                  title: song.title + ' (copia)',
+                  blocks: [for (final b in song.blocks) Block(id: HiveService.newId(), type: b.type, content: b.content)],
+                  originalKey: song.originalKey,
+                  tags: song.tags,
+                  author: song.author,
+                  isFavorite: song.isFavorite,
+                );
+                final updated = Note(
+                  id: note.id,
+                  title: note.title,
+                  createdAt: note.createdAt,
+                  updatedAt: DateTime.now(),
+                  songs: [...note.songs, newSong],
+                );
+                ref.read(notesProvider.notifier).upsert(updated);
+                setState(() {});
+              },
+              onDelete: () {
+                final updated = Note(
+                  id: note.id,
+                  title: note.title,
+                  createdAt: note.createdAt,
+                  updatedAt: DateTime.now(),
+                  songs: [for (final s in note.songs) if (s.id != song.id) s],
+                );
+                ref.read(notesProvider.notifier).upsert(updated);
+                setState(() {});
+              },
+            ),
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
@@ -174,49 +213,48 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
         icon: const Icon(Icons.music_note),
         label: const Text('Añadir canción'),
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () async {
-                  if (!ref.read(clipboardSongAvailableProvider)) return;
-                  final paste = await pasteSongFromClipboard();
-                  if (paste == null) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Portapapeles sin canción válida')));
-                    }
-                    return;
-                  }
-                  final updated = Note(
-                    id: note.id,
-                    title: note.title,
-                    createdAt: note.createdAt,
-                    updatedAt: DateTime.now(),
-                    songs: [...note.songs, paste],
-                  );
-                  ref.read(notesProvider.notifier).upsert(updated);
-                  ref.read(clipboardSongAvailableProvider.notifier).state = false;
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Canción pegada')));
-                  }
-                },
-                icon: const Icon(Icons.paste),
-                label: const Text('Pegar canción'),
+      bottomNavigationBar: ref.watch(clipboardSongAvailableProvider)
+          ? Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        final paste = await pasteSongFromClipboard();
+                        if (paste == null) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Portapapeles sin canción válida')));
+                          }
+                          return;
+                        }
+                        final updated = Note(
+                          id: note.id,
+                          title: note.title,
+                          createdAt: note.createdAt,
+                          updatedAt: DateTime.now(),
+                          songs: [...note.songs, paste],
+                        );
+                        ref.read(notesProvider.notifier).upsert(updated);
+                        ref.read(clipboardSongAvailableProvider.notifier).state = false;
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Canción pegada')));
+                        }
+                      },
+                      icon: const Icon(Icons.paste),
+                      label: const Text('Pegar canción'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: () => ref.read(clipboardSongAvailableProvider.notifier).state = false,
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Cancelar pegar',
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              onPressed: ref.watch(clipboardSongAvailableProvider)
-                  ? () => ref.read(clipboardSongAvailableProvider.notifier).state = false
-                  : null,
-              icon: const Icon(Icons.close),
-              tooltip: 'Cancelar pegar',
-            ),
-          ],
-        ),
-      ),
+            )
+          : null,
     );
   }
 }
@@ -288,7 +326,10 @@ class _SongCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               song.title,
-              style: Theme.of(context).textTheme.titleMedium,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: (Theme.of(context).textTheme.titleMedium?.fontSize ?? 16) + 1,
+                  ),
             ),
             const SizedBox(height: 8),
             for (final block in song.blocks) ...[
