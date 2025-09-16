@@ -117,11 +117,20 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                   }
                   return b;
                 }).toList();
+                // Actualizar también el tono original si existe (o si está en el título)
+                String? baseKey = song.originalKey;
+                final titleMatch = RegExp(r"^(.*)\(([^)]+)\)\s*$").firstMatch(song.title);
+                if ((baseKey == null || baseKey.isEmpty) && titleMatch != null) {
+                  baseKey = titleMatch.group(2)!.trim();
+                }
+                final newKey = baseKey == null || baseKey.isEmpty
+                    ? song.originalKey
+                    : transposeKey(baseKey, semitones, preferSharps: settings.preferSharps);
                 final updatedSong = Song(
                   id: song.id,
                   title: song.title,
                   blocks: updatedBlocks,
-                  originalKey: song.originalKey,
+                  originalKey: newKey,
                   tags: song.tags,
                   author: song.author,
                   isFavorite: song.isFavorite,
