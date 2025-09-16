@@ -332,7 +332,7 @@ class _SongCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              _displayTitleWithKey(song.title, song.originalKey, _transposeBySong[song.id] ?? 0, preferSharps: settings.preferSharps),
+              _displayTitleWithKey(song.title, song.originalKey, semitones, preferSharps: preferSharps),
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                     fontSize: (Theme.of(context).textTheme.titleMedium?.fontSize ?? 16) + 1,
