@@ -77,6 +77,11 @@ class LibraryController extends StateNotifier<List<Song>> {
     }
     HiveService.libraryBox.put(song.id, song);
   }
+
+  void delete(String songId) {
+    HiveService.libraryBox.delete(songId);
+    state = state.where((s) => s.id != songId).toList();
+  }
 }
 
 // Clipboard state to enable/disable paste button

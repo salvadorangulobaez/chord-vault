@@ -20,6 +20,7 @@ class NoteEditorScreen extends ConsumerStatefulWidget {
 
 class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   final Map<String, int> _transposeBySong = {}; // songId -> semitonos
+  bool _fabMenuOpen = false;
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +55,9 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
           ),
         ],
       ),
-      body: ReorderableListView.builder(
+      body: note.songs.isEmpty
+          ? const _EmptyNotePlaceholder()
+          : ReorderableListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: note.songs.length,
         buildDefaultDragHandles: false,
@@ -165,7 +168,15 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 await showModalBottomSheet(
                   context: context,
                   isScrollControlled: true,
-                  builder: (_) => _SongEditorSheet(note: note, song: song),
+                  builder: (_) => _SongEditorSheet(
+                    note: note,
+                    song: song,
+                    onOriginalKeyChanged: () {
+                      setState(() {
+                        _transposeBySong[song.id] = 0;
+                      });
+                    },
+                  ),
                 );
                 setState(() {});
               },
@@ -196,16 +207,42 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 ref.read(notesProvider.notifier).upsert(updated);
                 setState(() {});
               },
-              onDelete: () {
-                final updated = Note(
-                  id: note.id,
-                  title: note.title,
-                  createdAt: note.createdAt,
-                  updatedAt: DateTime.now(),
-                  songs: [for (final s in note.songs) if (s.id != song.id) s],
+              onDelete: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Eliminar canción'),
+                    content: Text('¿Eliminar "' + song.title + '" de esta nota?'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+                      TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Eliminar')),
+                    ],
+                  ),
                 );
-                ref.read(notesProvider.notifier).upsert(updated);
-                setState(() {});
+                if (confirm == true) {
+                  final updated = Note(
+                    id: note.id,
+                    title: note.title,
+                    createdAt: note.createdAt,
+                    updatedAt: DateTime.now(),
+                    songs: [for (final s in note.songs) if (s.id != song.id) s],
+                  );
+                  ref.read(notesProvider.notifier).upsert(updated);
+                  setState(() {});
+                }
+              },
+              onSaveToLibrary: () {
+                final libSong = Song(
+                  id: HiveService.newId(),
+                  title: song.title,
+                  blocks: [for (final b in song.blocks) Block(id: HiveService.newId(), type: b.type, content: b.content)],
+                  originalKey: song.originalKey,
+                  tags: song.tags,
+                  author: song.author,
+                  isFavorite: song.isFavorite,
+                );
+                ref.read(libraryProvider.notifier).upsert(libSong);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Guardada en biblioteca')));
               },
             ),
           );
@@ -213,34 +250,83 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
       ),
       floatingActionButton: settings.readOnlyMode
           ? null
-          : FloatingActionButton.extended(
-        onPressed: () async {
-          final song = Song(
-            id: HiveService.newId(),
-            title: 'Nueva canción',
-            blocks: [
-              Block(id: HiveService.newId(), type: BlockType.text, content: 'INTRO'),
-              Block(id: HiveService.newId(), type: BlockType.chords, content: 'D A Bm G'),
-            ],
-          );
-          final updated = Note(
-            id: note.id,
-            title: note.title,
-            createdAt: note.createdAt,
-            updatedAt: DateTime.now(),
-            songs: [...note.songs, song],
-          );
-          ref.read(notesProvider.notifier).upsert(updated);
-          await showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            builder: (_) => _SongEditorSheet(note: updated, song: song),
-          );
-          if (mounted) setState(() {});
-        },
-        icon: const Icon(Icons.music_note),
-        label: const Text('Añadir canción'),
-      ),
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (_fabMenuOpen) ...[
+                  FloatingActionButton.extended(
+                    heroTag: 'fab-insert-lib',
+                    onPressed: () async {
+                      final picked = await showModalBottomSheet<Song>(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (_) => const _LibraryPickerSheet(),
+                      );
+                      if (picked != null) {
+                        final updated = Note(
+                          id: note.id,
+                          title: note.title,
+                          createdAt: note.createdAt,
+                          updatedAt: DateTime.now(),
+                          songs: [...note.songs, picked],
+                        );
+                        ref.read(notesProvider.notifier).upsert(updated);
+                        setState(() {});
+                      }
+                      setState(() => _fabMenuOpen = false);
+                    },
+                    icon: const Icon(Icons.library_add),
+                    label: const Text('Insertar de biblioteca'),
+                  ),
+                  const SizedBox(height: 8),
+                  FloatingActionButton.extended(
+                    heroTag: 'fab-add-song',
+                    onPressed: () async {
+                      final song = Song(
+                        id: HiveService.newId(),
+                        title: 'Nueva canción',
+                        blocks: [
+                          Block(id: HiveService.newId(), type: BlockType.text, content: 'INTRO'),
+                          Block(id: HiveService.newId(), type: BlockType.chords, content: 'D A Bm G'),
+                        ],
+                      );
+                      final updated = Note(
+                        id: note.id,
+                        title: note.title,
+                        createdAt: note.createdAt,
+                        updatedAt: DateTime.now(),
+                        songs: [...note.songs, song],
+                      );
+                      ref.read(notesProvider.notifier).upsert(updated);
+                      await showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (_) => _SongEditorSheet(
+                          note: updated,
+                          song: song,
+                          onOriginalKeyChanged: () {
+                            setState(() {
+                              _transposeBySong[song.id] = 0;
+                            });
+                          },
+                        ),
+                      );
+                      if (mounted) setState(() {});
+                      setState(() => _fabMenuOpen = false);
+                    },
+                    icon: const Icon(Icons.music_note),
+                    label: const Text('Añadir canción'),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                FloatingActionButton(
+                  heroTag: 'fab-main',
+                  onPressed: () => setState(() => _fabMenuOpen = !_fabMenuOpen),
+                  child: Icon(_fabMenuOpen ? Icons.close : Icons.add),
+                ),
+              ],
+            ),
       bottomNavigationBar: ref.watch(clipboardSongAvailableProvider)
           ? Padding(
               padding: const EdgeInsets.all(12),
@@ -274,6 +360,29 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final picked = await showModalBottomSheet<Song>(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (_) => const _LibraryPickerSheet(),
+                      );
+                      if (picked != null) {
+                        final updated = Note(
+                          id: note.id,
+                          title: note.title,
+                          createdAt: note.createdAt,
+                          updatedAt: DateTime.now(),
+                          songs: [...note.songs, picked],
+                        );
+                        ref.read(notesProvider.notifier).upsert(updated);
+                        setState(() {});
+                      }
+                    },
+                    icon: const Icon(Icons.library_add),
+                    label: const Text('Insertar de biblioteca'),
+                  ),
+                  const SizedBox(width: 8),
                   IconButton(
                     onPressed: () => ref.read(clipboardSongAvailableProvider.notifier).state = false,
                     icon: const Icon(Icons.close),
@@ -300,6 +409,7 @@ class _SongCard extends StatelessWidget {
     required this.onCopy,
     required this.onDuplicate,
     required this.onDelete,
+    required this.onSaveToLibrary,
   });
 
   final Song song;
@@ -313,6 +423,7 @@ class _SongCard extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback onDuplicate;
   final VoidCallback onDelete;
+  final VoidCallback onSaveToLibrary;
 
   @override
   Widget build(BuildContext context) {
@@ -341,6 +452,9 @@ class _SongCard extends StatelessWidget {
                       case 'duplicate':
                         onDuplicate();
                         break;
+                      case 'save_library':
+                        onSaveToLibrary();
+                        break;
                       case 'delete':
                         onDelete();
                         break;
@@ -349,6 +463,7 @@ class _SongCard extends StatelessWidget {
                   itemBuilder: (context) => const [
                     PopupMenuItem(value: 'copy', child: Text('Copiar')),
                     PopupMenuItem(value: 'duplicate', child: Text('Duplicar')),
+                    PopupMenuItem(value: 'save_library', child: Text('Guardar en biblioteca')),
                     PopupMenuItem(value: 'delete', child: Text('Eliminar')),
                   ],
                 ),
@@ -447,9 +562,10 @@ class _ChordBlockView extends StatelessWidget {
 }
 
 class _SongEditorSheet extends ConsumerStatefulWidget {
-  const _SongEditorSheet({required this.note, required this.song});
+  const _SongEditorSheet({required this.note, required this.song, this.onOriginalKeyChanged});
   final Note note;
   final Song song;
+  final VoidCallback? onOriginalKeyChanged;
 
   @override
   ConsumerState<_SongEditorSheet> createState() => _SongEditorSheetState();
@@ -486,6 +602,12 @@ class _SongEditorSheetState extends ConsumerState<_SongEditorSheet> {
       author: song.author,
       isFavorite: song.isFavorite,
     );
+    // Si cambia el tono original, reseteamos transposición de vista para esta canción
+    final prevKey = song.originalKey?.trim();
+    final newKey = _keyCtrl.text.trim().isEmpty ? null : _keyCtrl.text.trim();
+    if (prevKey != newKey) {
+      widget.onOriginalKeyChanged?.call();
+    }
     final updatedNote = Note(
       id: note.id,
       title: note.title,
@@ -646,3 +768,92 @@ class _SongEditorSheetState extends ConsumerState<_SongEditorSheet> {
 }
 
 
+class _LibraryPickerSheet extends ConsumerWidget {
+  const _LibraryPickerSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final songs = ref.watch(libraryProvider);
+    final query = ref.watch(_libPickerSearchProvider);
+    final q = query.trim().toLowerCase();
+    final filtered = q.isEmpty
+        ? songs
+        : songs.where((s) => s.title.toLowerCase().contains(q) || (s.tags.join(' ').toLowerCase().contains(q))).toList();
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.9,
+      builder: (_, controller) {
+        return Scaffold(
+          appBar: AppBar(
+            title: SizedBox(
+              height: 40,
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: 'Buscar en biblioteca',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: query.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () => ref.read(_libPickerSearchProvider.notifier).state = '',
+                        )
+                      : null,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                onChanged: (v) => ref.read(_libPickerSearchProvider.notifier).state = v,
+              ),
+            ),
+          ),
+          body: ListView.builder(
+            controller: controller,
+            itemCount: filtered.length,
+            itemBuilder: (context, index) {
+              final s = filtered[index];
+              return ListTile(
+                title: Text(s.title),
+                subtitle: Text(s.originalKey ?? ''),
+                onTap: () {
+                  // devolver la canción seleccionada
+                  Navigator.pop(context, s);
+                },
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+final _libPickerSearchProvider = StateProvider<String>((ref) => '');
+
+class _EmptyNotePlaceholder extends StatelessWidget {
+  const _EmptyNotePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.library_music, size: 64, color: Theme.of(context).colorScheme.primary.withOpacity(0.8)),
+            const SizedBox(height: 12),
+            Text(
+              'Tu nota está vacía',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Tocá el botón + para añadir una canción o insertar desde la biblioteca.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -5,6 +5,7 @@ import '../providers/app_providers.dart';
 import '../models/note.dart';
 import '../services/storage/hive_service.dart';
 import 'note_editor_screen.dart';
+import 'library_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -47,6 +48,13 @@ class HomeScreen extends ConsumerWidget {
           ),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Biblioteca',
+            icon: const Icon(Icons.library_music),
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const LibraryScreen()));
+            },
+          ),
           IconButton(
             tooltip: viewAsGrid ? 'Vista lista' : 'Vista mosaicos',
             icon: Icon(viewAsGrid ? Icons.view_list : Icons.grid_view),
