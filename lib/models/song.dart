@@ -11,6 +11,8 @@ class Song {
     this.tags = const [],
     this.author,
     this.isFavorite = false,
+    DateTime? createdAt,
+    DateTime? updatedAt,
   });
 
   final String id;
@@ -20,6 +22,10 @@ class Song {
   final List<String> tags;
   final String? author;
   bool isFavorite;
+  DateTime get createdAt => _createdAt ?? DateTime.now();
+  DateTime? _createdAt;
+  DateTime get updatedAt => _updatedAt ?? _createdAt ?? DateTime.now();
+  DateTime? _updatedAt;
 }
 
 class SongAdapter extends TypeAdapter<Song> {
@@ -32,7 +38,7 @@ class SongAdapter extends TypeAdapter<Song> {
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return Song(
+    final song = Song(
       id: fields[0] as String,
       title: fields[1] as String,
       blocks: (fields[2] as List).cast<Block>(),
@@ -41,12 +47,19 @@ class SongAdapter extends TypeAdapter<Song> {
       author: fields[5] as String?,
       isFavorite: (fields[6] as bool?) ?? false,
     );
+    if (fields.containsKey(7)) {
+      song._createdAt = DateTime.fromMillisecondsSinceEpoch(fields[7] as int);
+    }
+    if (fields.containsKey(8)) {
+      song._updatedAt = DateTime.fromMillisecondsSinceEpoch(fields[8] as int);
+    }
+    return song;
   }
 
   @override
   void write(BinaryWriter writer, Song obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -60,7 +73,11 @@ class SongAdapter extends TypeAdapter<Song> {
       ..writeByte(5)
       ..write(obj.author)
       ..writeByte(6)
-      ..write(obj.isFavorite);
+      ..write(obj.isFavorite)
+      ..writeByte(7)
+      ..write(obj.createdAt.millisecondsSinceEpoch)
+      ..writeByte(8)
+      ..write(DateTime.now().millisecondsSinceEpoch);
   }
 }
 

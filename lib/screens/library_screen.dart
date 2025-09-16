@@ -12,11 +12,27 @@ class LibraryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final songs = ref.watch(libraryProvider);
+    final sort = ref.watch(_libSortProvider);
     final query = ref.watch(_libSearchProvider);
     final q = query.trim().toLowerCase();
-    final filtered = q.isEmpty
+    List<Song> filtered = q.isEmpty
         ? songs
         : songs.where((s) => s.title.toLowerCase().contains(q) || (s.tags.join(' ').toLowerCase().contains(q))).toList();
+    filtered = [...filtered];
+    switch (sort) {
+      case LibrarySort.alphaAsc:
+        filtered.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+        break;
+      case LibrarySort.alphaDesc:
+        filtered.sort((a, b) => b.title.toLowerCase().compareTo(a.title.toLowerCase()));
+        break;
+      case LibrarySort.updatedDesc:
+        filtered.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+        break;
+      case LibrarySort.createdDesc:
+        filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        break;
+    }
     return Scaffold(
       appBar: AppBar(
         title: SizedBox(
@@ -39,6 +55,17 @@ class LibraryScreen extends ConsumerWidget {
           ),
         ),
         actions: [
+          PopupMenuButton<LibrarySort>(
+            initialValue: sort,
+            onSelected: (v) => ref.read(_libSortProvider.notifier).state = v,
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: LibrarySort.alphaAsc, child: Text('A-Z')),
+              PopupMenuItem(value: LibrarySort.alphaDesc, child: Text('Z-A')),
+              PopupMenuItem(value: LibrarySort.updatedDesc, child: Text('Más recientes')),
+              PopupMenuItem(value: LibrarySort.createdDesc, child: Text('Más nuevos')),
+            ],
+            icon: const Icon(Icons.sort),
+          ),
           IconButton(
             tooltip: 'Nueva canción',
             icon: const Icon(Icons.add),
@@ -79,6 +106,8 @@ class LibraryScreen extends ConsumerWidget {
 }
 
 final _libSearchProvider = StateProvider<String>((ref) => '');
+enum LibrarySort { alphaAsc, alphaDesc, updatedDesc, createdDesc }
+final _libSortProvider = StateProvider<LibrarySort>((ref) => LibrarySort.updatedDesc);
 
 class _LibrarySongEditor extends ConsumerStatefulWidget {
   const _LibrarySongEditor({required this.song, required this.isNew});
