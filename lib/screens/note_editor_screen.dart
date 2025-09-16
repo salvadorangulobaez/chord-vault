@@ -20,6 +20,7 @@ class NoteEditorScreen extends ConsumerStatefulWidget {
 
 class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   final Map<String, int> _transposeBySong = {}; // songId -> semitonos
+  bool _fabMenuOpen = false;
 
   @override
   Widget build(BuildContext context) {
@@ -226,34 +227,75 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
       ),
       floatingActionButton: settings.readOnlyMode
           ? null
-          : FloatingActionButton.extended(
-        onPressed: () async {
-          final song = Song(
-            id: HiveService.newId(),
-            title: 'Nueva canción',
-            blocks: [
-              Block(id: HiveService.newId(), type: BlockType.text, content: 'INTRO'),
-              Block(id: HiveService.newId(), type: BlockType.chords, content: 'D A Bm G'),
-            ],
-          );
-          final updated = Note(
-            id: note.id,
-            title: note.title,
-            createdAt: note.createdAt,
-            updatedAt: DateTime.now(),
-            songs: [...note.songs, song],
-          );
-          ref.read(notesProvider.notifier).upsert(updated);
-          await showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            builder: (_) => _SongEditorSheet(note: updated, song: song),
-          );
-          if (mounted) setState(() {});
-        },
-        icon: const Icon(Icons.music_note),
-        label: const Text('Añadir canción'),
-      ),
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (_fabMenuOpen) ...[
+                  FloatingActionButton.extended(
+                    heroTag: 'fab-insert-lib',
+                    onPressed: () async {
+                      final picked = await showModalBottomSheet<Song>(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (_) => const _LibraryPickerSheet(),
+                      );
+                      if (picked != null) {
+                        final updated = Note(
+                          id: note.id,
+                          title: note.title,
+                          createdAt: note.createdAt,
+                          updatedAt: DateTime.now(),
+                          songs: [...note.songs, picked],
+                        );
+                        ref.read(notesProvider.notifier).upsert(updated);
+                        setState(() {});
+                      }
+                      setState(() => _fabMenuOpen = false);
+                    },
+                    icon: const Icon(Icons.library_add),
+                    label: const Text('Insertar de biblioteca'),
+                  ),
+                  const SizedBox(height: 8),
+                  FloatingActionButton.extended(
+                    heroTag: 'fab-add-song',
+                    onPressed: () async {
+                      final song = Song(
+                        id: HiveService.newId(),
+                        title: 'Nueva canción',
+                        blocks: [
+                          Block(id: HiveService.newId(), type: BlockType.text, content: 'INTRO'),
+                          Block(id: HiveService.newId(), type: BlockType.chords, content: 'D A Bm G'),
+                        ],
+                      );
+                      final updated = Note(
+                        id: note.id,
+                        title: note.title,
+                        createdAt: note.createdAt,
+                        updatedAt: DateTime.now(),
+                        songs: [...note.songs, song],
+                      );
+                      ref.read(notesProvider.notifier).upsert(updated);
+                      await showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (_) => _SongEditorSheet(note: updated, song: song),
+                      );
+                      if (mounted) setState(() {});
+                      setState(() => _fabMenuOpen = false);
+                    },
+                    icon: const Icon(Icons.music_note),
+                    label: const Text('Añadir canción'),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                FloatingActionButton(
+                  heroTag: 'fab-main',
+                  onPressed: () => setState(() => _fabMenuOpen = !_fabMenuOpen),
+                  child: Icon(_fabMenuOpen ? Icons.close : Icons.add),
+                ),
+              ],
+            ),
       bottomNavigationBar: ref.watch(clipboardSongAvailableProvider)
           ? Padding(
               padding: const EdgeInsets.all(12),
