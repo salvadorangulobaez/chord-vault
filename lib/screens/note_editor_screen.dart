@@ -295,6 +295,7 @@ class _SongCard extends StatelessWidget {
     required this.onReset,
     required this.onApplyPermanently,
     required this.preferSharps,
+    required this.readOnly,
     required this.onEditSong,
     required this.onCopy,
     required this.onDuplicate,
@@ -307,6 +308,7 @@ class _SongCard extends StatelessWidget {
   final VoidCallback onReset;
   final VoidCallback onApplyPermanently;
   final bool preferSharps;
+  final bool readOnly;
   final VoidCallback onEditSong;
   final VoidCallback onCopy;
   final VoidCallback onDuplicate;
