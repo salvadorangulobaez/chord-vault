@@ -168,7 +168,15 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 await showModalBottomSheet(
                   context: context,
                   isScrollControlled: true,
-                  builder: (_) => _SongEditorSheet(note: note, song: song),
+                  builder: (_) => _SongEditorSheet(
+                    note: note,
+                    song: song,
+                    onOriginalKeyChanged: () {
+                      setState(() {
+                        _transposeBySong[song.id] = 0;
+                      });
+                    },
+                  ),
                 );
                 setState(() {});
               },
@@ -294,7 +302,15 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                       await showModalBottomSheet(
                         context: context,
                         isScrollControlled: true,
-                        builder: (_) => _SongEditorSheet(note: updated, song: song),
+                        builder: (_) => _SongEditorSheet(
+                          note: updated,
+                          song: song,
+                          onOriginalKeyChanged: () {
+                            setState(() {
+                              _transposeBySong[song.id] = 0;
+                            });
+                          },
+                        ),
                       );
                       if (mounted) setState(() {});
                       setState(() => _fabMenuOpen = false);
@@ -546,9 +562,10 @@ class _ChordBlockView extends StatelessWidget {
 }
 
 class _SongEditorSheet extends ConsumerStatefulWidget {
-  const _SongEditorSheet({required this.note, required this.song});
+  const _SongEditorSheet({required this.note, required this.song, this.onOriginalKeyChanged});
   final Note note;
   final Song song;
+  final VoidCallback? onOriginalKeyChanged;
 
   @override
   ConsumerState<_SongEditorSheet> createState() => _SongEditorSheetState();
@@ -585,6 +602,12 @@ class _SongEditorSheetState extends ConsumerState<_SongEditorSheet> {
       author: song.author,
       isFavorite: song.isFavorite,
     );
+    // Si cambia el tono original, reseteamos transposición de vista para esta canción
+    final prevKey = song.originalKey?.trim();
+    final newKey = _keyCtrl.text.trim().isEmpty ? null : _keyCtrl.text.trim();
+    if (prevKey != newKey) {
+      widget.onOriginalKeyChanged?.call();
+    }
     final updatedNote = Note(
       id: note.id,
       title: note.title,
