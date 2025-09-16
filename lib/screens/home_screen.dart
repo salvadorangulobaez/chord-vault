@@ -27,7 +27,25 @@ class HomeScreen extends ConsumerWidget {
     final sorted = [...filtered]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cancionero'),
+        title: SizedBox(
+          height: 40,
+          child: TextField(
+            decoration: InputDecoration(
+              hintText: 'Buscar notas y canciones',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: query.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () => ref.read(_searchQueryProvider.notifier).state = '',
+                    )
+                  : null,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            onChanged: (v) => ref.read(_searchQueryProvider.notifier).state = v,
+          ),
+        ),
         actions: [
           IconButton(
             tooltip: viewAsGrid ? 'Vista lista' : 'Vista mosaicos',
@@ -35,27 +53,6 @@ class HomeScreen extends ConsumerWidget {
             onPressed: () => ref.read(_viewModeProvider.notifier).state = !viewAsGrid,
           ),
         ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(56),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Buscar notas y canciones',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: query.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () => ref.read(_searchQueryProvider.notifier).state = '',
-                      )
-                    : null,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                isDense: true,
-              ),
-              onChanged: (v) => ref.read(_searchQueryProvider.notifier).state = v,
-            ),
-          ),
-        ),
       ),
       body: viewAsGrid
           ? Padding(
