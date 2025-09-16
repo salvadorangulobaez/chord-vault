@@ -295,6 +295,13 @@ class _SongCard extends StatelessWidget {
           children: [
             Row(
               children: [
+                const Spacer(),
+                IconButton(onPressed: onEditSong, tooltip: 'Editar', icon: const Icon(Icons.edit)),
+                IconButton(onPressed: () => onTranspose(-1), icon: const Icon(Icons.remove)),
+                Text('$semitones'),
+                IconButton(onPressed: () => onTranspose(1), icon: const Icon(Icons.add)),
+                TextButton(onPressed: onReset, child: const Text('Reset')),
+                TextButton(onPressed: onApplyPermanently, child: const Text('Aplicar')),
                 PopupMenuButton<String>(
                   onSelected: (value) async {
                     switch (value) {
@@ -315,12 +322,6 @@ class _SongCard extends StatelessWidget {
                     PopupMenuItem(value: 'delete', child: Text('Eliminar')),
                   ],
                 ),
-                IconButton(onPressed: () => onTranspose(-1), icon: const Icon(Icons.remove)),
-                Text('$semitones'),
-                IconButton(onPressed: () => onTranspose(1), icon: const Icon(Icons.add)),
-                TextButton(onPressed: onReset, child: const Text('Reset')),
-                TextButton(onPressed: onApplyPermanently, child: const Text('Aplicar')),
-                IconButton(onPressed: onEditSong, tooltip: 'Editar', icon: const Icon(Icons.edit)),
               ],
             ),
             const SizedBox(height: 6),
