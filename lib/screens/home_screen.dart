@@ -6,6 +6,7 @@ import '../models/note.dart';
 import '../services/storage/hive_service.dart';
 import 'note_editor_screen.dart';
 import 'library_screen.dart';
+import 'help_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -170,24 +171,42 @@ class HomeScreen extends ConsumerWidget {
                 );
               },
             ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          final id = HiveService.newId();
-          final note = Note(
-            id: id,
-            title: 'Nota ${notes.length + 1}',
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
-          ref.read(notesProvider.notifier).upsert(note);
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => NoteEditorScreen(noteId: id),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Align(
+            alignment: Alignment.bottomLeft,
+            child: FloatingActionButton(
+              heroTag: 'help-fab',
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpScreen()));
+              },
+              child: const Icon(Icons.help_outline),
             ),
-          );
-        },
-        child: const Icon(Icons.add),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton(
+            heroTag: 'add-fab',
+            onPressed: () {
+              final id = HiveService.newId();
+              final note = Note(
+                id: id,
+                title: 'Nota ${notes.length + 1}',
+                createdAt: DateTime.now(),
+                updatedAt: DateTime.now(),
+              );
+              ref.read(notesProvider.notifier).upsert(note);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => NoteEditorScreen(noteId: id),
+                ),
+              );
+            },
+            child: const Icon(Icons.add),
+          ),
+        ],
       ),
     );
   }
