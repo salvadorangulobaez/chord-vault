@@ -192,7 +192,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
+        onPressed: () async {
           final song = Song(
             id: HiveService.newId(),
             title: 'Nueva canción',
@@ -209,6 +209,12 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
             songs: [...note.songs, song],
           );
           ref.read(notesProvider.notifier).upsert(updated);
+          await showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            builder: (_) => _SongEditorSheet(note: updated, song: song),
+          );
+          if (mounted) setState(() {});
         },
         icon: const Icon(Icons.music_note),
         label: const Text('Añadir canción'),
