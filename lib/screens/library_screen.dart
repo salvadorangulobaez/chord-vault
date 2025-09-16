@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import '../providers/app_providers.dart';
 import '../models/song.dart';
@@ -34,6 +35,8 @@ class LibraryScreen extends ConsumerWidget {
         filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         break;
     }
+    final selecting = ref.watch(_libSelectingProvider);
+    final selectedSet = ref.watch(_libSelectedSetProvider);
     return Scaffold(
       appBar: AppBar(
         title: SizedBox(
@@ -109,16 +112,41 @@ class LibraryScreen extends ConsumerWidget {
               }
             },
           ),
+          IconButton(
+            tooltip: selecting ? 'Salir selección' : 'Exportar',
+            icon: Icon(selecting ? Icons.close : Icons.output),
+            onPressed: () {
+              if (selecting) {
+                ref.read(_libSelectingProvider.notifier).state = false;
+                ref.read(_libSelectedSetProvider.notifier).state = <String>{};
+              } else {
+                ref.read(_libSelectingProvider.notifier).state = true;
+              }
+            },
+          ),
         ],
       ),
       body: ListView.builder(
         itemCount: filtered.length,
         itemBuilder: (context, index) {
           final s = filtered[index];
+          final selected = selectedSet.contains(s.id);
           return ListTile(
             title: Text(s.title),
             subtitle: Text(s.originalKey ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
-            trailing: PopupMenuButton<String>(
+            leading: selecting
+                ? Checkbox(
+                    value: selected,
+                    onChanged: (v) {
+                      final set = {...ref.read(_libSelectedSetProvider)};
+                      v == true ? set.add(s.id) : set.remove(s.id);
+                      ref.read(_libSelectedSetProvider.notifier).state = set;
+                    },
+                  )
+                : null,
+            trailing: selecting
+                ? null
+                : PopupMenuButton<String>(
               onSelected: (v) async {
                 switch (v) {
                   case 'edit':
@@ -154,6 +182,46 @@ class LibraryScreen extends ConsumerWidget {
           );
         },
       ),
+      bottomNavigationBar: selecting
+          ? SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        ref.read(_libSelectedSetProvider.notifier).state = filtered.map((x) => x.id).toSet();
+                      },
+                      child: const Text('Seleccionar todo'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () {
+                        ref.read(_libSelectedSetProvider.notifier).state = <String>{};
+                      },
+                      child: const Text('Deseleccionar'),
+                    ),
+                    const Spacer(),
+                    ElevatedButton.icon(
+                      onPressed: selectedSet.isEmpty
+                          ? null
+                          : () async {
+                              final toExport = filtered.where((s) => selectedSet.contains(s.id)).toList();
+                              final text = TextFormat.exportSongs(toExport);
+                              await Clipboard.setData(ClipboardData(text: text));
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context)
+                                    .showSnackBar(const SnackBar(content: Text('Exportado al portapapeles')));
+                              }
+                            },
+                      icon: const Icon(Icons.copy),
+                      label: const Text('Exportar seleccionados'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : null,
     );
   }
 }
@@ -161,6 +229,8 @@ class LibraryScreen extends ConsumerWidget {
 final _libSearchProvider = StateProvider<String>((ref) => '');
 enum LibrarySort { alphaAsc, alphaDesc, updatedDesc, createdDesc }
 final _libSortProvider = StateProvider<LibrarySort>((ref) => LibrarySort.updatedDesc);
+final _libSelectingProvider = StateProvider<bool>((ref) => false);
+final _libSelectedSetProvider = StateProvider<Set<String>>((ref) => <String>{});
 
 class _LibrarySongEditor extends ConsumerStatefulWidget {
   const _LibrarySongEditor({required this.song, required this.isNew});

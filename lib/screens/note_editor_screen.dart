@@ -361,41 +361,8 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      final text = await showDialog<String>(
-                        context: context,
-                        builder: (_) {
-                          final ctrl = TextEditingController();
-                          return AlertDialog(
-                            title: const Text('Pegar canciones'),
-                            content: TextField(controller: ctrl, maxLines: 10),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-                              TextButton(onPressed: () => Navigator.pop(context, ctrl.text), child: const Text('Importar')),
-                            ],
-                          );
-                        },
-                      );
-                      if (text != null && text.trim().isNotEmpty) {
-                        final parsed = TextFormat.parseSongs(text, idGen: () => HiveService.newId());
-                        if (parsed.isNotEmpty) {
-                          final updated = Note(
-                            id: note.id,
-                            title: note.title,
-                            createdAt: note.createdAt,
-                            updatedAt: DateTime.now(),
-                            songs: [...note.songs, ...parsed],
-                          );
-                          ref.read(notesProvider.notifier).upsert(updated);
-                          setState(() {});
-                        }
-                      }
-                    },
-                    icon: const Icon(Icons.input),
-                    label: const Text('Importar texto'),
-                  ),
-                  const SizedBox(width: 8),
+                  // Importar texto solo en biblioteca/nota desde FAB 'Insertar de biblioteca';
+                  // Se retiró aquí por requerimiento.
                   ElevatedButton.icon(
                     onPressed: () async {
                       final picked = await showModalBottomSheet<Song>(
