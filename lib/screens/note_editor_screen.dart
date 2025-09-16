@@ -207,6 +207,19 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 ref.read(notesProvider.notifier).upsert(updated);
                 setState(() {});
               },
+              onSaveToLibrary: () {
+                final libSong = Song(
+                  id: HiveService.newId(),
+                  title: song.title,
+                  blocks: [for (final b in song.blocks) Block(id: HiveService.newId(), type: b.type, content: b.content)],
+                  originalKey: song.originalKey,
+                  tags: song.tags,
+                  author: song.author,
+                  isFavorite: song.isFavorite,
+                );
+                ref.read(libraryProvider.notifier).upsert(libSong);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Guardada en biblioteca')));
+              },
             ),
           );
         },
@@ -323,6 +336,7 @@ class _SongCard extends StatelessWidget {
     required this.onCopy,
     required this.onDuplicate,
     required this.onDelete,
+    required this.onSaveToLibrary,
   });
 
   final Song song;
@@ -336,6 +350,7 @@ class _SongCard extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback onDuplicate;
   final VoidCallback onDelete;
+  final VoidCallback onSaveToLibrary;
 
   @override
   Widget build(BuildContext context) {
@@ -365,18 +380,7 @@ class _SongCard extends StatelessWidget {
                         onDuplicate();
                         break;
                       case 'save_library':
-                        ref.read(libraryProvider.notifier).upsert(Song(
-                          id: HiveService.newId(),
-                          title: song.title,
-                          blocks: [for (final b in song.blocks) Block(id: HiveService.newId(), type: b.type, content: b.content)],
-                          originalKey: song.originalKey,
-                          tags: song.tags,
-                          author: song.author,
-                          isFavorite: song.isFavorite,
-                        ));
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Guardada en biblioteca')));
-                        }
+                        onSaveToLibrary();
                         break;
                       case 'delete':
                         onDelete();
