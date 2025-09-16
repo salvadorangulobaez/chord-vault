@@ -28,6 +28,9 @@ class HiveService {
       Hive.openBox<Song>(libraryBoxName),
       Hive.openBox(settingsBoxName),
     ]);
+    // Cargar preferencias iniciales si existen
+    final box = Hive.box(settingsBoxName);
+    // gridView persisted can be read by UI via settingsProvider initialization if desired
   }
 
   static Box<Note> get notesBox => Hive.box<Note>(notesBoxName);

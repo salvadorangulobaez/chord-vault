@@ -7,16 +7,18 @@ import '../services/storage/hive_service.dart';
 final settingsProvider = StateProvider<SettingsState>((ref) => SettingsState());
 
 class SettingsState {
-  SettingsState({this.preferSharps = true, this.fontScale = 1.0, this.readOnlyMode = false});
+  SettingsState({this.preferSharps = true, this.fontScale = 1.0, this.readOnlyMode = false, this.gridView = false});
   final bool preferSharps;
   final double fontScale;
   final bool readOnlyMode;
+  final bool gridView;
 
-  SettingsState copyWith({bool? preferSharps, double? fontScale, bool? readOnlyMode}) =>
+  SettingsState copyWith({bool? preferSharps, double? fontScale, bool? readOnlyMode, bool? gridView}) =>
       SettingsState(
         preferSharps: preferSharps ?? this.preferSharps,
         fontScale: fontScale ?? this.fontScale,
         readOnlyMode: readOnlyMode ?? this.readOnlyMode,
+        gridView: gridView ?? this.gridView,
       );
 }
 

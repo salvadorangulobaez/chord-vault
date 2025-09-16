@@ -14,7 +14,17 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notes = ref.watch(notesProvider);
-    final viewAsGrid = ref.watch(_viewModeProvider); // false=list, true=grid
+    final settings = ref.watch(settingsProvider);
+    final viewAsGrid = settings.gridView; // false=list, true=grid
+    // Inicializar gridView desde Hive si no está configurado
+    if (!ref.read(_initializedPrefProvider)) {
+      final persisted = HiveService.settingsBox.get('gridView') as bool?;
+      if (persisted != null && persisted != viewAsGrid) {
+        final s = ref.read(settingsProvider);
+        ref.read(settingsProvider.notifier).state = s.copyWith(gridView: persisted);
+      }
+      ref.read(_initializedPrefProvider.notifier).state = true;
+    }
     final query = ref.watch(_searchQueryProvider);
     final q = query.trim().toLowerCase();
     final filtered = q.isEmpty
@@ -59,7 +69,12 @@ class HomeScreen extends ConsumerWidget {
           IconButton(
             tooltip: viewAsGrid ? 'Vista lista' : 'Vista mosaicos',
             icon: Icon(viewAsGrid ? Icons.view_list : Icons.grid_view),
-            onPressed: () => ref.read(_viewModeProvider.notifier).state = !viewAsGrid,
+            onPressed: () {
+              final s = ref.read(settingsProvider);
+              ref.read(settingsProvider.notifier).state = s.copyWith(gridView: !viewAsGrid);
+              // Persistir en Hive settings simple
+              HiveService.settingsBox.put('gridView', !viewAsGrid);
+            },
           ),
         ],
       ),
@@ -171,12 +186,12 @@ class HomeScreen extends ConsumerWidget {
                 );
               },
             ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
+      floatingActionButton: Stack(
+        alignment: Alignment.bottomCenter,
         children: [
-          Align(
-            alignment: Alignment.bottomLeft,
+          Positioned(
+            left: 16,
+            bottom: 16,
             child: FloatingActionButton(
               heroTag: 'help-fab',
               onPressed: () {
@@ -185,26 +200,29 @@ class HomeScreen extends ConsumerWidget {
               child: const Icon(Icons.help_outline),
             ),
           ),
-          const SizedBox(height: 12),
-          FloatingActionButton(
-            heroTag: 'add-fab',
-            onPressed: () {
-              final id = HiveService.newId();
-              final note = Note(
-                id: id,
-                title: 'Nota ${notes.length + 1}',
-                createdAt: DateTime.now(),
-                updatedAt: DateTime.now(),
-              );
-              ref.read(notesProvider.notifier).upsert(note);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => NoteEditorScreen(noteId: id),
-                ),
-              );
-            },
-            child: const Icon(Icons.add),
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionButton(
+              heroTag: 'add-fab',
+              onPressed: () {
+                final id = HiveService.newId();
+                final note = Note(
+                  id: id,
+                  title: 'Nota ${notes.length + 1}',
+                  createdAt: DateTime.now(),
+                  updatedAt: DateTime.now(),
+                );
+                ref.read(notesProvider.notifier).upsert(note);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => NoteEditorScreen(noteId: id),
+                  ),
+                );
+              },
+              child: const Icon(Icons.add),
+            ),
           ),
         ],
       ),
@@ -215,6 +233,7 @@ class HomeScreen extends ConsumerWidget {
 final _viewModeProvider = StateProvider<bool>((ref) => false);
 final _searchQueryProvider = StateProvider<String>((ref) => '');
 final _expandedNotesProvider = StateProvider<Set<String>>((ref) => <String>{});
+final _initializedPrefProvider = StateProvider<bool>((ref) => false);
 
 class _NoteMenu extends ConsumerWidget {
   const _NoteMenu({required this.note});
