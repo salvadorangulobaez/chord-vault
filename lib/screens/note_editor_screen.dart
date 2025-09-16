@@ -43,6 +43,16 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
             ref.read(notesProvider.notifier).upsert(updated);
           },
         ),
+        actions: [
+          IconButton(
+            tooltip: settings.readOnlyMode ? 'Modo edición' : 'Modo lectura',
+            icon: Icon(settings.readOnlyMode ? Icons.edit : Icons.visibility),
+            onPressed: () {
+              final s = ref.read(settingsProvider);
+              ref.read(settingsProvider.notifier).state = s.copyWith(readOnlyMode: !s.readOnlyMode);
+            },
+          ),
+        ],
       ),
       body: ReorderableListView.builder(
         padding: const EdgeInsets.all(12),
@@ -150,6 +160,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 });
               },
               preferSharps: settings.preferSharps,
+              readOnly: settings.readOnlyMode,
               onEditSong: () async {
                 await showModalBottomSheet(
                   context: context,
@@ -200,7 +211,9 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: settings.readOnlyMode
+          ? null
+          : FloatingActionButton.extended(
         onPressed: () async {
           final song = Song(
             id: HiveService.newId(),
@@ -308,7 +321,7 @@ class _SongCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            if (!readOnly) Row(
               children: [
                 const Spacer(),
                 IconButton(onPressed: onEditSong, tooltip: 'Editar', icon: const Icon(Icons.edit)),

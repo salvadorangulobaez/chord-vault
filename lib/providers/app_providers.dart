@@ -7,14 +7,16 @@ import '../services/storage/hive_service.dart';
 final settingsProvider = StateProvider<SettingsState>((ref) => SettingsState());
 
 class SettingsState {
-  SettingsState({this.preferSharps = true, this.fontScale = 1.0});
+  SettingsState({this.preferSharps = true, this.fontScale = 1.0, this.readOnlyMode = false});
   final bool preferSharps;
   final double fontScale;
+  final bool readOnlyMode;
 
-  SettingsState copyWith({bool? preferSharps, double? fontScale}) =>
+  SettingsState copyWith({bool? preferSharps, double? fontScale, bool? readOnlyMode}) =>
       SettingsState(
         preferSharps: preferSharps ?? this.preferSharps,
         fontScale: fontScale ?? this.fontScale,
+        readOnlyMode: readOnlyMode ?? this.readOnlyMode,
       );
 }
 
