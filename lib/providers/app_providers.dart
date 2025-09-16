@@ -77,4 +77,7 @@ class LibraryController extends StateNotifier<List<Song>> {
   }
 }
 
+// Clipboard state to enable/disable paste button
+final clipboardSongAvailableProvider = StateProvider<bool>((ref) => false);
+
 

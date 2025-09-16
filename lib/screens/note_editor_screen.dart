@@ -112,6 +112,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
             },
             onCopy: () async {
               await copySongToClipboard(song);
+              ref.read(clipboardSongAvailableProvider.notifier).state = true;
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Canción copiada')));
               }
@@ -180,6 +181,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
             Expanded(
               child: ElevatedButton.icon(
                 onPressed: () async {
+                  if (!ref.read(clipboardSongAvailableProvider)) return;
                   final paste = await pasteSongFromClipboard();
                   if (paste == null) {
                     if (mounted) {
@@ -195,6 +197,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                     songs: [...note.songs, paste],
                   );
                   ref.read(notesProvider.notifier).upsert(updated);
+                  ref.read(clipboardSongAvailableProvider.notifier).state = false;
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Canción pegada')));
                   }
@@ -202,6 +205,14 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 icon: const Icon(Icons.paste),
                 label: const Text('Pegar canción'),
               ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: ref.watch(clipboardSongAvailableProvider)
+                  ? () => ref.read(clipboardSongAvailableProvider.notifier).state = false
+                  : null,
+              icon: const Icon(Icons.close),
+              tooltip: 'Cancelar pegar',
             ),
           ],
         ),
@@ -246,12 +257,6 @@ class _SongCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(
-                  child: Text(
-                    song.title,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
                 PopupMenuButton<String>(
                   onSelected: (value) async {
                     switch (value) {
@@ -277,7 +282,13 @@ class _SongCard extends StatelessWidget {
                 IconButton(onPressed: () => onTranspose(1), icon: const Icon(Icons.add)),
                 TextButton(onPressed: onReset, child: const Text('Reset')),
                 TextButton(onPressed: onApplyPermanently, child: const Text('Aplicar')),
+                IconButton(onPressed: onEditSong, tooltip: 'Editar', icon: const Icon(Icons.edit)),
               ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              song.title,
+              style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
             for (final block in song.blocks) ...[
