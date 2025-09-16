@@ -24,6 +24,7 @@ class HomeScreen extends ConsumerWidget {
             }
             return false;
           }).toList();
+    final sorted = [...filtered]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     return Scaffold(
       appBar: AppBar(
         title: const Text('Cancionero'),
@@ -66,9 +67,9 @@ class HomeScreen extends ConsumerWidget {
                   mainAxisSpacing: 8,
                   childAspectRatio: 1.1,
                 ),
-                itemCount: filtered.length,
+                itemCount: sorted.length,
                 itemBuilder: (context, index) {
-                  final note = filtered[index];
+                  final note = sorted[index];
                   final titles = note.songs.map((s) => s.title).toList();
                   return GestureDetector(
                     onTap: () {
@@ -110,9 +111,9 @@ class HomeScreen extends ConsumerWidget {
               ),
             )
           : ListView.builder(
-              itemCount: filtered.length,
+              itemCount: sorted.length,
               itemBuilder: (context, index) {
-                final note = filtered[index];
+                final note = sorted[index];
                 final expanded = ref.watch(_expandedNotesProvider).contains(note.id);
                 final songTitles = note.songs.map((s) => s.title).toList();
                 return Column(
