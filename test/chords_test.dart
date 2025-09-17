@@ -34,6 +34,20 @@ void main() {
       expect(tokens.every((t) => t.isChord), true);
       expect(tokens.last.raw, '(C#m)');
     });
+
+    test('Acorde entre paréntesis seguido de guión se detecta como un token', () {
+      final tokens = parseLineToTokens('E A Bm (C)-A');
+      expect(tokens.length, 4);
+      expect(tokens[3].raw, '(C)-A');
+      expect(tokens[3].isChord, true);
+    });
+
+    test('Acorde con paréntesis al final se detecta como un token', () {
+      final tokens = parseLineToTokens('E A Bm A(C)');
+      expect(tokens.length, 4);
+      expect(tokens[3].raw, 'A(C)');
+      expect(tokens[3].isChord, true);
+    });
   });
 
   group('Transpose', () {
@@ -63,6 +77,16 @@ void main() {
       expect(out, '(D#m)');
       final out2 = transposeToken('(Fm7)', -1, const TransposeOptions(preferSharps: false));
       expect(out2, '(Em7)');
+    });
+
+    test('Acorde entre paréntesis seguido de guión se transponen ambos', () {
+      final out = transposeToken('(C)-A', 2, const TransposeOptions(preferSharps: true));
+      expect(out, '(D)-B');
+    });
+
+    test('Acorde con paréntesis al final se transponen ambos', () {
+      final out = transposeToken('A(C)', 2, const TransposeOptions(preferSharps: true));
+      expect(out, 'B(D)');
     });
     test('Preferencia de bemoles', () {
       final out = transposeToken('F#', 1, const TransposeOptions(preferSharps: false));

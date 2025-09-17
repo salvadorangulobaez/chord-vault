@@ -23,6 +23,18 @@ bool _looksLikeChordToken(String token) {
     return _looksLikeChordToken(innerToken);
   }
   
+  // Verificar si contiene paréntesis en el medio o al final (ej: A(C), (C)-A)
+  if (token.contains('(') && token.contains(')')) {
+    // Dividir por paréntesis y verificar que cada parte sea un acorde válido
+    final parts = token.split(RegExp(r'[()]'));
+    for (final part in parts) {
+      if (part.isNotEmpty && !_looksLikeChordToken(part)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  
   // Debe iniciar con nota
   if (!_rootRegex.hasMatch(token)) return false;
   // Permitir sufijos comunes y otros caracteres dentro del token, incluido '-'

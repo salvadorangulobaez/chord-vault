@@ -140,6 +140,39 @@ String transposeToken(String token, int semitones, TransposeOptions options) {
     return '($transposedInner)';
   }
   
+  // Si el token contiene paréntesis en el medio o al final (ej: A(C), (C)-A)
+  if (token.contains('(') && token.contains(')')) {
+    // Transponer cada parte del token que esté entre paréntesis
+    String result = token;
+    final regex = RegExp(r'\(([^)]+)\)');
+    final matches = regex.allMatches(token);
+    
+    for (final match in matches) {
+      final original = match.group(0)!; // (C)
+      final inner = match.group(1)!; // C
+      final transposedInner = transposeToken(inner, semitones, options);
+      result = result.replaceFirst(original, '($transposedInner)');
+    }
+    
+    // Transponer las partes que no están entre paréntesis
+    final parts = result.split(RegExp(r'[()]'));
+    for (int i = 0; i < parts.length; i += 2) { // Solo las partes pares (no entre paréntesis)
+      if (parts[i].isNotEmpty) {
+        parts[i] = _transposeSingleToken(parts[i], semitones, options);
+      }
+    }
+    
+    // Reconstruir el token
+    final buffer = StringBuffer();
+    for (int i = 0; i < parts.length; i++) {
+      buffer.write(parts[i]);
+      if (i < parts.length - 1) {
+        buffer.write(i % 2 == 0 ? '(' : ')');
+      }
+    }
+    return buffer.toString();
+  }
+  
   // Si el token contiene subacordes unidos con '-', transponer cada parte.
   if (token.contains('-')) {
     final parts = token.split('-');
