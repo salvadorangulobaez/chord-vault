@@ -17,34 +17,12 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
-  void initState() {
-    super.initState();
-    // Cargar preferencia persistida de vista (lista/mosaico) sin modificar durante build
-    final persisted = HiveService.settingsBox.get('gridView') as bool?;
-    if (persisted != null) {
-      final s = ref.read(settingsProvider);
-      if (s.gridView != persisted) {
-        ref.read(settingsProvider.notifier).state = s.copyWith(gridView: persisted);
-      }
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final ref = this.ref;
     final notes = ref.watch(notesProvider);
-    final settings = ref.watch(settingsProvider);
-    final viewAsGrid = settings.gridView; // false=list, true=grid
-    // Inicializar gridView desde Hive si no está configurado
-    if (!ref.read(_initializedPrefProvider)) {
-      final persisted = HiveService.settingsBox.get('gridView') as bool?;
-      if (persisted != null && persisted != viewAsGrid) {
-        final s = ref.read(settingsProvider);
-        ref.read(settingsProvider.notifier).state = s.copyWith(gridView: persisted);
-      }
-      ref.read(_initializedPrefProvider.notifier).state = true;
-    }
+    final viewAsGrid = ref.watch(_viewModeProvider); // false=list, true=grid
     final query = ref.watch(_searchQueryProvider);
+    final selecting = ref.watch(_homeSelectingProvider);
+    final selectedSet = ref.watch(_homeSelectedSetProvider);
     final q = query.trim().toLowerCase();
     final filtered = q.isEmpty
         ? notes
@@ -78,23 +56,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            tooltip: 'Biblioteca',
-            icon: const Icon(Icons.library_music),
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const LibraryScreen()));
-            },
-          ),
-          IconButton(
-            tooltip: viewAsGrid ? 'Vista lista' : 'Vista mosaicos',
-            icon: Icon(viewAsGrid ? Icons.view_list : Icons.grid_view),
-            onPressed: () {
-              final s = ref.read(settingsProvider);
-              ref.read(settingsProvider.notifier).state = s.copyWith(gridView: !viewAsGrid);
-              // Persistir en Hive settings simple
-              HiveService.settingsBox.put('gridView', !viewAsGrid);
-            },
-          ),
+          if (selecting)
+            IconButton(
+              tooltip: 'Salir selección',
+              icon: const Icon(Icons.close),
+              onPressed: () {
+                ref.read(_homeSelectingProvider.notifier).state = false;
+                ref.read(_homeSelectedSetProvider.notifier).state = <String>{};
+              },
+            )
+          else ...[
+            IconButton(
+              tooltip: 'Biblioteca',
+              icon: const Icon(Icons.library_music),
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const LibraryScreen()));
+              },
+            ),
+            IconButton(
+              tooltip: viewAsGrid ? 'Vista lista' : 'Vista mosaicos',
+              icon: Icon(viewAsGrid ? Icons.view_list : Icons.grid_view),
+              onPressed: () => ref.read(_viewModeProvider.notifier).state = !viewAsGrid,
+            ),
+          ],
         ],
       ),
       body: viewAsGrid
@@ -111,15 +95,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 itemBuilder: (context, index) {
                   final note = sorted[index];
                   final titles = note.songs.map((s) => s.title).toList();
+                  final selected = selectedSet.contains(note.id);
                   return GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => NoteEditorScreen(noteId: note.id),
-                        ),
-                      );
+                    onLongPress: () {
+                      final set = {...ref.read(_homeSelectedSetProvider)};
+                      set.add(note.id);
+                      ref.read(_homeSelectedSetProvider.notifier).state = set;
+                      ref.read(_homeSelectingProvider.notifier).state = true;
                     },
+                    onTap: selecting
+                        ? () {
+                            final set = {...ref.read(_homeSelectedSetProvider)};
+                            if (selected) {
+                              set.remove(note.id);
+                            } else {
+                              set.add(note.id);
+                            }
+                            ref.read(_homeSelectedSetProvider.notifier).state = set;
+                          }
+                        : () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => NoteEditorScreen(noteId: note.id),
+                              ),
+                            );
+                          },
                     child: Card(
                       child: Padding(
                         padding: const EdgeInsets.all(12),
@@ -128,10 +129,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           children: [
                             Row(
                               children: [
+                                if (selecting)
+                                  Checkbox(
+                                    value: selected,
+                                    onChanged: (v) {
+                                      final set = {...ref.read(_homeSelectedSetProvider)};
+                                      if (v == true) {
+                                        set.add(note.id);
+                                      } else {
+                                        set.remove(note.id);
+                                      }
+                                      ref.read(_homeSelectedSetProvider.notifier).state = set;
+                                    },
+                                  ),
                                 Expanded(
                                   child: Text(note.title, style: Theme.of(context).textTheme.titleMedium),
                                 ),
-                                _NoteMenu(note: note),
+                                if (!selecting) _NoteMenu(note: note),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -156,9 +170,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 final note = sorted[index];
                 final expanded = ref.watch(_expandedNotesProvider).contains(note.id);
                 final songTitles = note.songs.map((s) => s.title).toList();
-                return Column(
+                final selected = selectedSet.contains(note.id);
+                return GestureDetector(
+                  onLongPress: () {
+                    final set = {...ref.read(_homeSelectedSetProvider)};
+                    set.add(note.id);
+                    ref.read(_homeSelectedSetProvider.notifier).state = set;
+                    ref.read(_homeSelectingProvider.notifier).state = true;
+                  },
+                  child: Column(
                   children: [
                     ListTile(
+                      leading: selecting
+                          ? Checkbox(
+                              value: selected,
+                              onChanged: (v) {
+                                final set = {...ref.read(_homeSelectedSetProvider)};
+                                if (v == true) {
+                                  set.add(note.id);
+                                } else {
+                                  set.remove(note.id);
+                                }
+                                ref.read(_homeSelectedSetProvider.notifier).state = set;
+                              },
+                            )
+                          : null,
                       title: Text(note.title),
                       subtitle: expanded
                           ? Column(
@@ -172,87 +208,141 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               ],
                             )
                           : null,
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            tooltip: expanded ? 'Contraer' : 'Descontraer',
-                            icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
-                            onPressed: () {
-                              final set = {...ref.read(_expandedNotesProvider)};
-                              if (expanded) {
+                      trailing: selecting
+                          ? null
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: expanded ? 'Contraer' : 'Descontraer',
+                                  icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
+                                  onPressed: () {
+                                    final set = {...ref.read(_expandedNotesProvider)};
+                                    if (expanded) {
+                                      set.remove(note.id);
+                                    } else {
+                                      set.add(note.id);
+                                    }
+                                    ref.read(_expandedNotesProvider.notifier).state = set;
+                                  },
+                                ),
+                                _NoteMenu(note: note),
+                              ],
+                            ),
+                      onTap: selecting
+                          ? () {
+                              final set = {...ref.read(_homeSelectedSetProvider)};
+                              if (selected) {
                                 set.remove(note.id);
                               } else {
                                 set.add(note.id);
                               }
-                              ref.read(_expandedNotesProvider.notifier).state = set;
+                              ref.read(_homeSelectedSetProvider.notifier).state = set;
+                            }
+                          : () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => NoteEditorScreen(noteId: note.id),
+                                ),
+                              );
                             },
-                          ),
-                          _NoteMenu(note: note),
-                        ],
-                      ),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => NoteEditorScreen(noteId: note.id),
-                          ),
-                        );
-                      },
                     ),
                     const Divider(height: 0),
                   ],
+                ),
                 );
               },
             ),
-      floatingActionButton: Stack(
-        alignment: Alignment.bottomCenter,
-        children: [
-          Positioned(
-            left: 16,
-            bottom: 16,
-            child: FloatingActionButton(
-              heroTag: 'help-fab',
-              onPressed: () {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpScreen()));
-              },
-              child: const Icon(Icons.help_outline),
-            ),
-          ),
-          Positioned(
-            right: 16,
-            bottom: 16,
-            child: FloatingActionButton(
-              heroTag: 'add-fab',
-              onPressed: () {
-                final id = HiveService.newId();
-                final note = Note(
-                  id: id,
-                  title: 'Nota ${notes.length + 1}',
-                  createdAt: DateTime.now(),
-                  updatedAt: DateTime.now(),
-                );
-                ref.read(notesProvider.notifier).upsert(note);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => NoteEditorScreen(noteId: id),
+      bottomNavigationBar: selecting
+          ? SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    const Spacer(),
+                    ElevatedButton.icon(
+                      onPressed: selectedSet.isEmpty
+                          ? null
+                          : () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (_) => AlertDialog(
+                                  title: const Text('Eliminar notas'),
+                                  content: Text('¿Eliminar ${selectedSet.length} nota(s) seleccionada(s)?'),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+                                    TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Eliminar')),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                for (final id in selectedSet) {
+                                  ref.read(notesProvider.notifier).delete(id);
+                                }
+                                ref.read(_homeSelectingProvider.notifier).state = false;
+                                ref.read(_homeSelectedSetProvider.notifier).state = <String>{};
+                              }
+                            },
+                      icon: const Icon(Icons.delete),
+                      label: const Text('Eliminar seleccionadas'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : null,
+      floatingActionButton: selecting
+          ? null
+          : Stack(
+              alignment: Alignment.bottomCenter,
+              children: [
+                Positioned(
+                  left: 16,
+                  bottom: 16,
+                  child: FloatingActionButton(
+                    heroTag: 'help-fab',
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpScreen()));
+                    },
+                    child: const Icon(Icons.help_outline),
                   ),
-                );
-              },
-              child: const Icon(Icons.add),
+                ),
+                Positioned(
+                  right: 16,
+                  bottom: 16,
+                  child: FloatingActionButton(
+                    heroTag: 'add-fab',
+                    onPressed: () {
+                      final id = HiveService.newId();
+                      final note = Note(
+                        id: id,
+                        title: 'Nota ${notes.length + 1}',
+                        createdAt: DateTime.now(),
+                        updatedAt: DateTime.now(),
+                      );
+                      ref.read(notesProvider.notifier).upsert(note);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => NoteEditorScreen(noteId: id),
+                        ),
+                      );
+                    },
+                    child: const Icon(Icons.add),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }
 
-final _viewModeProvider = StateProvider<bool>((ref) => false);
+final _viewModeProvider = StateProvider<bool>((ref) => true);
 final _searchQueryProvider = StateProvider<String>((ref) => '');
 final _expandedNotesProvider = StateProvider<Set<String>>((ref) => <String>{});
-final _initializedPrefProvider = StateProvider<bool>((ref) => false);
+final _homeSelectingProvider = StateProvider<bool>((ref) => false);
+final _homeSelectedSetProvider = StateProvider<Set<String>>((ref) => <String>{});
 
 class _NoteMenu extends ConsumerWidget {
   const _NoteMenu({required this.note});

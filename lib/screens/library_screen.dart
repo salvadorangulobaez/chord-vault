@@ -131,53 +131,61 @@ class LibraryScreen extends ConsumerWidget {
         itemBuilder: (context, index) {
           final s = filtered[index];
           final selected = selectedSet.contains(s.id);
-          return ListTile(
-            title: Text(s.title),
-            subtitle: Text(s.originalKey ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
-            leading: selecting
-                ? Checkbox(
-                    value: selected,
-                    onChanged: (v) {
-                      final set = {...ref.read(_libSelectedSetProvider)};
-                      v == true ? set.add(s.id) : set.remove(s.id);
-                      ref.read(_libSelectedSetProvider.notifier).state = set;
-                    },
-                  )
-                : null,
-            trailing: selecting
-                ? null
-                : PopupMenuButton<String>(
-              onSelected: (v) async {
-                switch (v) {
-                  case 'edit':
-                    await showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      builder: (_) => _LibrarySongEditor(song: s, isNew: false),
-                    );
-                    break;
-                  case 'delete':
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        title: const Text('Eliminar canción de biblioteca'),
-                        content: Text('¿Eliminar "' + s.title + '" de la biblioteca?'),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
-                          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Eliminar')),
-                        ],
-                      ),
-                    );
-                    if (confirm == true) {
-                      ref.read(libraryProvider.notifier).delete(s.id);
-                    }
-                    break;
-                }
-              },
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'edit', child: Text('Editar')),
-                PopupMenuItem(value: 'delete', child: Text('Eliminar')),
-              ],
+          return GestureDetector(
+            onLongPress: () {
+              final set = {...ref.read(_libSelectedSetProvider)};
+              set.add(s.id);
+              ref.read(_libSelectedSetProvider.notifier).state = set;
+              ref.read(_libSelectingProvider.notifier).state = true;
+            },
+            child: ListTile(
+              title: Text(s.title),
+              subtitle: Text(s.originalKey ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
+              leading: selecting
+                  ? Checkbox(
+                      value: selected,
+                      onChanged: (v) {
+                        final set = {...ref.read(_libSelectedSetProvider)};
+                        v == true ? set.add(s.id) : set.remove(s.id);
+                        ref.read(_libSelectedSetProvider.notifier).state = set;
+                      },
+                    )
+                  : null,
+              trailing: selecting
+                  ? null
+                  : PopupMenuButton<String>(
+                      onSelected: (v) async {
+                        switch (v) {
+                          case 'edit':
+                            await showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              builder: (_) => _LibrarySongEditor(song: s, isNew: false),
+                            );
+                            break;
+                          case 'delete':
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (_) => AlertDialog(
+                                title: const Text('Eliminar canción de biblioteca'),
+                                content: Text('¿Eliminar "' + s.title + '" de la biblioteca?'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+                                  TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Eliminar')),
+                                ],
+                              ),
+                            );
+                            if (confirm == true) {
+                              ref.read(libraryProvider.notifier).delete(s.id);
+                            }
+                            break;
+                        }
+                      },
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(value: 'edit', child: Text('Editar')),
+                        PopupMenuItem(value: 'delete', child: Text('Eliminar')),
+                      ],
+                    ),
             ),
           );
         },
@@ -188,18 +196,21 @@ class LibraryScreen extends ConsumerWidget {
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    TextButton(
+                    ElevatedButton.icon(
                       onPressed: () {
-                        ref.read(_libSelectedSetProvider.notifier).state = filtered.map((x) => x.id).toSet();
+                        final allIds = filtered.map((s) => s.id).toSet();
+                        ref.read(_libSelectedSetProvider.notifier).state = allIds;
                       },
-                      child: const Text('Seleccionar todo'),
+                      icon: const Icon(Icons.select_all),
+                      label: const Text('Seleccionar todo'),
                     ),
                     const SizedBox(width: 8),
-                    TextButton(
+                    ElevatedButton.icon(
                       onPressed: () {
                         ref.read(_libSelectedSetProvider.notifier).state = <String>{};
                       },
-                      child: const Text('Deseleccionar'),
+                      icon: const Icon(Icons.deselect),
+                      label: const Text('Deseleccionar'),
                     ),
                     const Spacer(),
                     ElevatedButton.icon(

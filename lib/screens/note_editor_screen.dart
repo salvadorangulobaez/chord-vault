@@ -321,14 +321,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                   FloatingActionButton.extended(
                     heroTag: 'fab-add-song',
                     onPressed: () async {
-                      final song = Song(
-                        id: HiveService.newId(),
-                        title: 'Nueva canción',
-                        blocks: [
-                          Block(id: HiveService.newId(), type: BlockType.text, content: 'INTRO'),
-                          Block(id: HiveService.newId(), type: BlockType.chords, content: 'D A Bm G'),
-                        ],
-                      );
+                      final song = Song(id: HiveService.newId(), title: 'Nueva canción', blocks: []);
                       final updated = Note(
                         id: note.id,
                         title: note.title,
@@ -668,26 +661,23 @@ class _SongEditorSheetState extends ConsumerState<_SongEditorSheet> {
       expand: false,
       initialChildSize: 0.9,
       builder: (_, controller) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
+        return Scaffold(
+          resizeToAvoidBottomInset: true,
+          appBar: AppBar(
+            title: const Text('Editar canción'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  _save(note, song, _blocks, _titleCtrl.text);
+                  Navigator.pop(context);
+                },
+                child: const Text('Guardar'),
+              ),
+            ],
           ),
-          child: Scaffold(
-            appBar: AppBar(
-              title: const Text('Editar canción'),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    _save(note, song, _blocks, _titleCtrl.text);
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Guardar'),
-                ),
-              ],
-            ),
-            body: ListView(
-              controller: controller,
-              padding: const EdgeInsets.all(12),
+          body: ListView(
+            controller: controller,
+            padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.of(context).viewInsets.bottom + 24),
               children: [
                 TextField(
                   controller: _titleCtrl,
@@ -800,7 +790,6 @@ class _SongEditorSheetState extends ConsumerState<_SongEditorSheet> {
                 ),
               ],
             ),
-          ),
         );
       },
     );
