@@ -240,44 +240,43 @@ class LibraryScreen extends ConsumerWidget {
                                 return;
                               }
                               
-                              final result = await showDialog<Note?>(
+                              final result = await showModalBottomSheet<Note?>(
                                 context: context,
-                                builder: (_) => AlertDialog(
-                                  title: const Text('Insertar canciones'),
-                                  content: SizedBox(
-                                    width: double.maxFinite,
-                                    height: 300,
-                                    child: Column(
+                                isScrollControlled: true,
+                                builder: (_) => DraggableScrollableSheet(
+                                  expand: false,
+                                  initialChildSize: 0.7,
+                                  maxChildSize: 0.9,
+                                  minChildSize: 0.3,
+                                  builder: (_, controller) => Scaffold(
+                                    appBar: AppBar(
+                                      title: const Text('Insertar canciones'),
+                                      automaticallyImplyLeading: false,
+                                      actions: [
+                                        IconButton(
+                                          onPressed: () => Navigator.pop(context),
+                                          icon: const Icon(Icons.close),
+                                        ),
+                                      ],
+                                    ),
+                                    body: ListView(
+                                      controller: controller,
                                       children: [
                                         ListTile(
-                                          leading: const Icon(Icons.add),
+                                          leading: const Icon(Icons.add, color: Colors.green),
                                           title: const Text('Nueva nota'),
                                           subtitle: const Text('Crear una nueva nota'),
                                           onTap: () => Navigator.pop(context, null), // null = nueva nota
                                         ),
                                         const Divider(),
-                                        Expanded(
-                                          child: ListView.builder(
-                                            itemCount: notes.length,
-                                            itemBuilder: (context, index) {
-                                              final note = notes[index];
-                                              return ListTile(
-                                                title: Text(note.title),
-                                                subtitle: Text('${note.songs.length} canciones'),
-                                                onTap: () => Navigator.pop(context, note),
-                                              );
-                                            },
-                                          ),
-                                        ),
+                                        ...notes.map((note) => ListTile(
+                                          title: Text(note.title),
+                                          subtitle: Text('${note.songs.length} canciones'),
+                                          onTap: () => Navigator.pop(context, note),
+                                        )),
                                       ],
                                     ),
                                   ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      child: const Text('Cancelar'),
-                                    ),
-                                  ],
                                 ),
                               );
                               
