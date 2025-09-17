@@ -52,7 +52,7 @@ class LibraryScreen extends ConsumerWidget {
             : [
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    padding: const EdgeInsets.only(left: 8.0, right: 16.0),
                     child: TextField(
                       decoration: const InputDecoration(
                         hintText: 'Buscar canciones...',
@@ -91,24 +91,11 @@ class LibraryScreen extends ConsumerWidget {
                   icon: const Icon(Icons.add),
                 ),
                 IconButton(
-                  onPressed: () async {
-                    final text = await Clipboard.getData(Clipboard.kTextPlain);
-                    if (text?.text?.isNotEmpty == true && context.mounted) {
-                      try {
-                        final songs = TextFormat.parseSongs(text!.text!);
-                        for (final song in songs) {
-                          ref.read(libraryProvider.notifier).upsert(song);
-                        }
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('${songs.length} canción(es) importada(s)')),
-                        );
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Error al importar: $e')),
-                        );
-                      }
-                    }
-                  },
+                  onPressed: () => showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (_) => _ImportSongsSheet(),
+                  ),
                   icon: const Icon(Icons.content_paste),
                 ),
               ],
@@ -362,6 +349,38 @@ class LibraryScreen extends ConsumerWidget {
                     onPressed: selectedSet.isEmpty
                         ? null
                         : () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (_) => AlertDialog(
+                                title: const Text('Confirmar eliminación'),
+                                content: Text('¿Eliminar ${selectedSet.length} canción(es) seleccionada(s) de la biblioteca?'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, false),
+                                    child: const Text('Cancelar'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, true),
+                                    child: const Text('Eliminar'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm == true) {
+                              for (final songId in selectedSet) {
+                                ref.read(libraryProvider.notifier).delete(songId);
+                              }
+                              ref.read(_libSelectingProvider.notifier).state = false;
+                              ref.read(_libSelectedSetProvider.notifier).state = <String>{};
+                            }
+                          },
+                    icon: const Icon(Icons.delete),
+                    tooltip: 'Eliminar seleccionadas',
+                  ),
+                  IconButton(
+                    onPressed: selectedSet.isEmpty
+                        ? null
+                        : () async {
                             final toExport = library.where((s) => selectedSet.contains(s.id)).toList();
                             final text = TextFormat.exportSongs(toExport);
                             await Clipboard.setData(ClipboardData(text: text));
@@ -550,6 +569,139 @@ class _LibrarySongEditorState extends ConsumerState<_LibrarySongEditor> {
                 labelText: b.type == BlockType.chords ? 'Acordes' : (b.type == BlockType.text ? 'Etiqueta' : 'Nota'),
               ),
               onChanged: (v) => _blocks[index] = Block(id: b.id, type: b.type, content: v),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ImportSongsSheet extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_ImportSongsSheet> createState() => _ImportSongsSheetState();
+}
+
+class _ImportSongsSheetState extends ConsumerState<_ImportSongsSheet> {
+  final TextEditingController _textController = TextEditingController();
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.7,
+      minChildSize: 0.3,
+      maxChildSize: 0.9,
+      builder: (context, scrollController) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: Column(
+          children: [
+            // Handle
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // AppBar
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Text(
+                    'Importar canciones',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+            // Content
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+                ),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _textController,
+                      maxLines: null,
+                      expands: true,
+                      decoration: const InputDecoration(
+                        hintText: 'Pega aquí el texto de las canciones...',
+                        border: OutlineInputBorder(),
+                        alignLabelWithHint: true,
+                      ),
+                      autofocus: true,
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              final text = await Clipboard.getData(Clipboard.kTextPlain);
+                              if (text?.text?.isNotEmpty == true) {
+                                _textController.text = text!.text!;
+                              }
+                            },
+                            icon: const Icon(Icons.content_paste),
+                            label: const Text('Pegar'),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _textController.text.trim().isEmpty
+                                ? null
+                                : () async {
+                                    try {
+                                      final songs = TextFormat.parseSongs(_textController.text);
+                                      for (final song in songs) {
+                                        ref.read(libraryProvider.notifier).upsert(song);
+                                      }
+                                      if (mounted) {
+                                        Navigator.pop(context);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('${songs.length} canción(es) importada(s)')),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Error al importar: $e')),
+                                        );
+                                      }
+                                    }
+                                  },
+                            icon: const Icon(Icons.upload),
+                            label: const Text('Importar'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
