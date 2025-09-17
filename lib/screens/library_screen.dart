@@ -95,7 +95,7 @@ class LibraryScreen extends ConsumerWidget {
                     final text = await Clipboard.getData(Clipboard.kTextPlain);
                     if (text?.text?.isNotEmpty == true && context.mounted) {
                       try {
-                        final songs = parseSongsFromText(text!.text!);
+                        final songs = TextFormat.parseSongs(text!.text!);
                         for (final song in songs) {
                           ref.read(libraryProvider.notifier).upsert(song);
                         }
@@ -363,7 +363,7 @@ class LibraryScreen extends ConsumerWidget {
                         ? null
                         : () async {
                             final toExport = library.where((s) => selectedSet.contains(s.id)).toList();
-                            final text = toExport.map(songToText).join('\n\n---\n\n');
+                            final text = TextFormat.exportSongs(toExport);
                             await Clipboard.setData(ClipboardData(text: text));
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -425,7 +425,7 @@ class _LibrarySongEditorState extends ConsumerState<_LibrarySongEditor> {
       originalKey: _key.text.trim().isEmpty ? null : _key.text.trim(),
       tags: widget.song.tags,
       author: widget.song.author,
-      favorite: widget.song.favorite,
+      isFavorite: widget.song.isFavorite,
       createdAt: widget.song.createdAt,
       updatedAt: DateTime.now(),
     );
