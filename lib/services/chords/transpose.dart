@@ -133,6 +133,13 @@ ChordTokenParsed? parseChordToken(String token) {
 }
 
 String transposeToken(String token, int semitones, TransposeOptions options) {
+  // Si el token es un acorde entre paréntesis, transponer el contenido y mantener los paréntesis
+  if (token.startsWith('(') && token.endsWith(')')) {
+    final innerToken = token.substring(1, token.length - 1);
+    final transposedInner = transposeToken(innerToken, semitones, options);
+    return '($transposedInner)';
+  }
+  
   // Si el token contiene subacordes unidos con '-', transponer cada parte.
   if (token.contains('-')) {
     final parts = token.split('-');

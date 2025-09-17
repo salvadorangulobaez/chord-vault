@@ -27,6 +27,13 @@ void main() {
       final tokens = parseLineToTokens('INTRO D A');
       expect(tokens.first.isChord, false);
     });
+
+    test('Acordes entre paréntesis se detectan como acordes', () {
+      final tokens = parseLineToTokens('E A Bm D (C#m)');
+      expect(tokens.length, 5);
+      expect(tokens.every((t) => t.isChord), true);
+      expect(tokens.last.raw, '(C#m)');
+    });
   });
 
   group('Transpose', () {
@@ -49,6 +56,13 @@ void main() {
       final out2 = transposeToken('A-Bbm7b5-E/B', -1, const TransposeOptions(preferSharps: false));
       // A(-1)->Ab, Bbm7b5(-1)->Am7b5, E/B(-1)->Eb/Bb
       expect(out2, 'Ab-Am7b5-Eb/Bb');
+    });
+
+    test('Acordes entre paréntesis se transponen correctamente', () {
+      final out = transposeToken('(C#m)', 2, const TransposeOptions(preferSharps: true));
+      expect(out, '(D#m)');
+      final out2 = transposeToken('(Fm7)', -1, const TransposeOptions(preferSharps: false));
+      expect(out2, '(Em7)');
     });
     test('Preferencia de bemoles', () {
       final out = transposeToken('F#', 1, const TransposeOptions(preferSharps: false));

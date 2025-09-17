@@ -112,18 +112,23 @@ class LibraryScreen extends ConsumerWidget {
               }
             },
           ),
-          IconButton(
-            tooltip: selecting ? 'Salir selección' : 'Exportar',
-            icon: Icon(selecting ? Icons.close : Icons.output),
-            onPressed: () {
-              if (selecting) {
+          if (selecting)
+            IconButton(
+              tooltip: 'Salir selección',
+              icon: const Icon(Icons.close),
+              onPressed: () {
                 ref.read(_libSelectingProvider.notifier).state = false;
                 ref.read(_libSelectedSetProvider.notifier).state = <String>{};
-              } else {
+              },
+            )
+          else
+            IconButton(
+              tooltip: 'Exportar',
+              icon: const Icon(Icons.output),
+              onPressed: () {
                 ref.read(_libSelectingProvider.notifier).state = true;
-              }
-            },
-          ),
+              },
+            ),
         ],
       ),
       body: ListView.builder(
@@ -138,6 +143,17 @@ class LibraryScreen extends ConsumerWidget {
               ref.read(_libSelectedSetProvider.notifier).state = set;
               ref.read(_libSelectingProvider.notifier).state = true;
             },
+            onTap: selecting
+                ? () {
+                    final set = {...ref.read(_libSelectedSetProvider)};
+                    if (selected) {
+                      set.remove(s.id);
+                    } else {
+                      set.add(s.id);
+                    }
+                    ref.read(_libSelectedSetProvider.notifier).state = set;
+                  }
+                : null,
             child: ListTile(
               title: Text(s.title),
               subtitle: Text(s.originalKey ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -196,24 +212,23 @@ class LibraryScreen extends ConsumerWidget {
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    ElevatedButton.icon(
+                    IconButton(
                       onPressed: () {
                         final allIds = filtered.map((s) => s.id).toSet();
                         ref.read(_libSelectedSetProvider.notifier).state = allIds;
                       },
                       icon: const Icon(Icons.select_all),
-                      label: const Text('Seleccionar todo'),
+                      tooltip: 'Seleccionar todo',
                     ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
+                    IconButton(
                       onPressed: () {
                         ref.read(_libSelectedSetProvider.notifier).state = <String>{};
                       },
                       icon: const Icon(Icons.deselect),
-                      label: const Text('Deseleccionar'),
+                      tooltip: 'Deseleccionar',
                     ),
                     const Spacer(),
-                    ElevatedButton.icon(
+                    IconButton(
                       onPressed: selectedSet.isEmpty
                           ? null
                           : () async {
@@ -225,8 +240,8 @@ class LibraryScreen extends ConsumerWidget {
                                     .showSnackBar(const SnackBar(content: Text('Exportado al portapapeles')));
                               }
                             },
-                      icon: const Icon(Icons.copy),
-                      label: const Text('Exportar seleccionados'),
+                      icon: const Icon(Icons.output),
+                      tooltip: 'Exportar seleccionados',
                     ),
                   ],
                 ),

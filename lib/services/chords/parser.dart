@@ -16,6 +16,13 @@ final RegExp _bassRegex = RegExp(r'/(?:[A-G](?:#|b|♯|♭)?)');
 
 bool _looksLikeChordToken(String token) {
   if (token.isEmpty) return false;
+  
+  // Verificar si es un acorde entre paréntesis
+  if (token.startsWith('(') && token.endsWith(')')) {
+    final innerToken = token.substring(1, token.length - 1);
+    return _looksLikeChordToken(innerToken);
+  }
+  
   // Debe iniciar con nota
   if (!_rootRegex.hasMatch(token)) return false;
   // Permitir sufijos comunes y otros caracteres dentro del token, incluido '-'
