@@ -240,23 +240,36 @@ class LibraryScreen extends ConsumerWidget {
                                 return;
                               }
                               
-                              final selectedNote = await showDialog<Note>(
+                              final result = await showDialog<Note?>(
                                 context: context,
                                 builder: (_) => AlertDialog(
-                                  title: const Text('Seleccionar nota'),
+                                  title: const Text('Insertar canciones'),
                                   content: SizedBox(
                                     width: double.maxFinite,
-                                    child: ListView.builder(
-                                      shrinkWrap: true,
-                                      itemCount: notes.length,
-                                      itemBuilder: (context, index) {
-                                        final note = notes[index];
-                                        return ListTile(
-                                          title: Text(note.title),
-                                          subtitle: Text('${note.songs.length} canciones'),
-                                          onTap: () => Navigator.pop(context, note),
-                                        );
-                                      },
+                                    height: 300,
+                                    child: Column(
+                                      children: [
+                                        ListTile(
+                                          leading: const Icon(Icons.add),
+                                          title: const Text('Nueva nota'),
+                                          subtitle: const Text('Crear una nueva nota'),
+                                          onTap: () => Navigator.pop(context, null), // null = nueva nota
+                                        ),
+                                        const Divider(),
+                                        Expanded(
+                                          child: ListView.builder(
+                                            itemCount: notes.length,
+                                            itemBuilder: (context, index) {
+                                              final note = notes[index];
+                                              return ListTile(
+                                                title: Text(note.title),
+                                                subtitle: Text('${note.songs.length} canciones'),
+                                                onTap: () => Navigator.pop(context, note),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                   actions: [
@@ -268,21 +281,70 @@ class LibraryScreen extends ConsumerWidget {
                                 ),
                               );
                               
-                              if (selectedNote != null) {
-                                final updatedSongs = [...selectedNote.songs, ...toInsert];
-                                final updatedNote = Note(
-                                  id: selectedNote.id,
-                                  title: selectedNote.title,
-                                  createdAt: selectedNote.createdAt,
-                                  updatedAt: DateTime.now(),
-                                  songs: updatedSongs,
-                                );
-                                ref.read(notesProvider.notifier).upsert(updatedNote);
-                                
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('${toInsert.length} canción(es) agregada(s) a "${selectedNote.title}"')),
+                              if (result != null) {
+                                if (result == null) {
+                                  // Crear nueva nota
+                                  final newNoteTitle = await showDialog<String>(
+                                    context: context,
+                                    builder: (_) {
+                                      final ctrl = TextEditingController();
+                                      return AlertDialog(
+                                        title: const Text('Nueva nota'),
+                                        content: TextField(
+                                          controller: ctrl,
+                                          decoration: const InputDecoration(
+                                            labelText: 'Título de la nota',
+                                            hintText: 'Mi nueva nota',
+                                          ),
+                                          autofocus: true,
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(context),
+                                            child: const Text('Cancelar'),
+                                          ),
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(context, ctrl.text.trim()),
+                                            child: const Text('Crear'),
+                                          ),
+                                        ],
+                                      );
+                                    },
                                   );
+                                  
+                                  if (newNoteTitle != null && newNoteTitle.isNotEmpty) {
+                                    final newNote = Note(
+                                      id: HiveService.newId(),
+                                      title: newNoteTitle,
+                                      createdAt: DateTime.now(),
+                                      updatedAt: DateTime.now(),
+                                      songs: toInsert,
+                                    );
+                                    ref.read(notesProvider.notifier).upsert(newNote);
+                                    
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('${toInsert.length} canción(es) agregada(s) a nueva nota "$newNoteTitle"')),
+                                      );
+                                    }
+                                  }
+                                } else {
+                                  // Agregar a nota existente
+                                  final updatedSongs = [...result.songs, ...toInsert];
+                                  final updatedNote = Note(
+                                    id: result.id,
+                                    title: result.title,
+                                    createdAt: result.createdAt,
+                                    updatedAt: DateTime.now(),
+                                    songs: updatedSongs,
+                                  );
+                                  ref.read(notesProvider.notifier).upsert(updatedNote);
+                                  
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('${toInsert.length} canción(es) agregada(s) a "${result.title}"')),
+                                    );
+                                  }
                                 }
                                 
                                 // Salir del modo selección

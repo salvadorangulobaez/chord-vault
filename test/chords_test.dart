@@ -88,6 +88,11 @@ void main() {
       final out = transposeToken('A(C)', 2, const TransposeOptions(preferSharps: true));
       expect(out, 'B(D)');
     });
+
+    test('Secuencia de acordes entre paréntesis se transponen todos', () {
+      final out = transposeToken('(G A A B C D E G)', 2, const TransposeOptions(preferSharps: true));
+      expect(out, '(A B B C# D E F# A)');
+    });
     test('Preferencia de bemoles', () {
       final out = transposeToken('F#', 1, const TransposeOptions(preferSharps: false));
       expect(out, 'G');

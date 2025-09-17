@@ -140,9 +140,19 @@ String transposeToken(String token, int semitones, TransposeOptions options) {
     return '($transposedInner)';
   }
   
-  // Si el token contiene paréntesis en el medio o al final (ej: A(C), (C)-A)
+  // Si el token contiene paréntesis en el medio o al final (ej: A(C), (C)-A, (G A A B C D E G))
   if (token.contains('(') && token.contains(')')) {
-    // Transponer cada parte del token que esté entre paréntesis
+    // Caso especial: si todo el contenido está entre paréntesis y contiene espacios
+    if (token.startsWith('(') && token.endsWith(')')) {
+      final inner = token.substring(1, token.length - 1);
+      // Si contiene espacios, es una secuencia de acordes
+      if (inner.contains(' ')) {
+        final chords = inner.split(' ').map((c) => transposeToken(c.trim(), semitones, options)).join(' ');
+        return '($chords)';
+      }
+    }
+    
+    // Caso general: transponer cada parte del token que esté entre paréntesis
     String result = token;
     final regex = RegExp(r'\(([^)]+)\)');
     final matches = regex.allMatches(token);
