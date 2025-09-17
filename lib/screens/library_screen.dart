@@ -9,6 +9,7 @@ import '../models/block.dart';
 import '../services/storage/hive_service.dart';
 import '../services/io/text_format.dart';
 import 'note_editor_screen.dart';
+import 'song_preview_screen.dart';
 
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
@@ -166,6 +167,20 @@ class LibraryScreen extends ConsumerWidget {
                       },
                     )
                   : null,
+              onTap: selecting
+                  ? () {
+                      final set = {...ref.read(_libSelectedSetProvider)};
+                      set.contains(s.id) ? set.remove(s.id) : set.add(s.id);
+                      ref.read(_libSelectedSetProvider.notifier).state = set;
+                    }
+                  : () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SongPreviewScreen(songId: s.id),
+                        ),
+                      );
+                    },
               trailing: selecting
                   ? null
                   : PopupMenuButton<String>(
