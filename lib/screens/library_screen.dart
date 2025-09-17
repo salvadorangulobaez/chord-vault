@@ -8,6 +8,7 @@ import '../models/note.dart';
 import '../models/block.dart';
 import '../services/storage/hive_service.dart';
 import '../services/io/text_format.dart';
+import 'note_editor_screen.dart';
 
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
@@ -280,7 +281,9 @@ class LibraryScreen extends ConsumerWidget {
                                 ),
                               );
                               
-                              if (result != null) {
+                              // result puede ser null (nueva nota), una Note (nota existente), o null (cancelado)
+                              if (result != null || result == null) {
+                                // Si result es null, significa que se seleccionó "Nueva nota"
                                 if (result == null) {
                                   // Crear nueva nota
                                   final newNoteTitle = await showDialog<String>(
@@ -325,6 +328,14 @@ class LibraryScreen extends ConsumerWidget {
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(content: Text('${toInsert.length} canción(es) agregada(s) a nueva nota "$newNoteTitle"')),
                                       );
+                                      
+                                      // Navegar a la nueva nota
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => NoteEditorScreen(noteId: newNote.id),
+                                        ),
+                                      );
                                     }
                                   }
                                 } else {
@@ -342,6 +353,14 @@ class LibraryScreen extends ConsumerWidget {
                                   if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(content: Text('${toInsert.length} canción(es) agregada(s) a "${result.title}"')),
+                                    );
+                                    
+                                    // Navegar a la nota existente
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => NoteEditorScreen(noteId: result.id),
+                                      ),
                                     );
                                   }
                                 }
