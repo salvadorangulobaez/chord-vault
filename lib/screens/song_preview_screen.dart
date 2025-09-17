@@ -227,12 +227,12 @@ class _SongPreviewScreenState extends ConsumerState<SongPreviewScreen> {
     
     final lines = content.split('\n');
     final transposedLines = lines.map((line) {
-      final tokens = tokenizeLine(line);
+      final tokens = parseLineToTokens(line);
       final transposedTokens = tokens.map((token) {
         if (token.isChord) {
-          return transposeToken(token.content, transposeBy, TransposeOptions(preferSharps: preferSharps));
+          return transposeToken(token.raw, transposeBy, TransposeOptions(preferSharps: preferSharps));
         }
-        return token.content;
+        return token.raw;
       }).toList();
       return transposedTokens.join(' ');
     }).toList();
