@@ -37,7 +37,9 @@ class LibraryScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: selecting ? Text('${selectedSet.length} seleccionada(s)') : null,
+        title: selecting 
+            ? Text('${selectedSet.length} seleccionada(s)')
+            : const Text('Biblioteca'),
         leading: selecting
             ? IconButton(
                 icon: const Icon(Icons.close),
@@ -50,19 +52,6 @@ class LibraryScreen extends ConsumerWidget {
         actions: selecting
             ? []
             : [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 16.0, right: 8.0),
-                    child: TextField(
-                      decoration: const InputDecoration(
-                        hintText: 'Buscar canciones...',
-                        border: InputBorder.none,
-                        prefixIcon: Icon(Icons.search),
-                      ),
-                      onChanged: (v) => ref.read(_libSearchProvider.notifier).state = v,
-                    ),
-                  ),
-                ),
                 PopupMenuButton<LibrarySort>(
                   icon: const Icon(Icons.sort),
                   onSelected: (sort) => ref.read(_libSortProvider.notifier).state = sort,
@@ -100,9 +89,26 @@ class LibraryScreen extends ConsumerWidget {
                 ),
               ],
       ),
-      body: filtered.isEmpty
-          ? const Center(child: Text('No hay canciones en la biblioteca'))
-          : ListView.builder(
+      body: Column(
+        children: [
+          // Campo de búsqueda
+          if (!selecting)
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                decoration: const InputDecoration(
+                  hintText: 'Buscar canciones...',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (v) => ref.read(_libSearchProvider.notifier).state = v,
+              ),
+            ),
+          // Lista de canciones
+          Expanded(
+            child: filtered.isEmpty
+                ? const Center(child: Text('No hay canciones en la biblioteca'))
+                : ListView.builder(
               itemCount: filtered.length,
               itemBuilder: (context, index) {
                 final s = filtered[index];
@@ -187,6 +193,9 @@ class LibraryScreen extends ConsumerWidget {
                 );
               },
             ),
+          ),
+        ],
+      ),
       bottomNavigationBar: selecting
           ? BottomAppBar(
               child: Row(
