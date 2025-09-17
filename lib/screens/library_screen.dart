@@ -470,17 +470,17 @@ class _LibrarySongEditorState extends ConsumerState<_LibrarySongEditor> {
         return Scaffold(
           resizeToAvoidBottomInset: true,
           appBar: AppBar(
-              title: Text(widget.isNew ? 'Nueva en biblioteca' : 'Editar biblioteca'),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    _save();
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Guardar'),
-                ),
-              ],
-            ),
+            title: Text(widget.isNew ? 'Nueva en biblioteca' : 'Editar biblioteca'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  _save();
+                  Navigator.pop(context);
+                },
+                child: const Text('Guardar'),
+              ),
+            ],
+          ),
           body: ListView(
             controller: controller,
             padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.of(context).viewInsets.bottom + 24),
