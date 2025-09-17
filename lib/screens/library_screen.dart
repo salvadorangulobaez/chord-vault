@@ -167,6 +167,9 @@ class LibraryScreen extends ConsumerWidget {
                       },
                     )
                   : null,
+              contentPadding: selecting 
+                  ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
+                  : null,
               onTap: selecting
                   ? () {
                       final set = {...ref.read(_libSelectedSetProvider)};
@@ -469,6 +472,7 @@ class _LibrarySongEditorState extends ConsumerState<_LibrarySongEditor> {
         return Padding(
           padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
           child: Scaffold(
+            resizeToAvoidBottomInset: true,
             appBar: AppBar(
               title: Text(widget.isNew ? 'Nueva en biblioteca' : 'Editar biblioteca'),
               actions: [
@@ -489,7 +493,19 @@ class _LibrarySongEditorState extends ConsumerState<_LibrarySongEditor> {
                 const SizedBox(height: 8),
                 TextField(controller: _key, decoration: const InputDecoration(labelText: 'Tono (opcional)')),
                 const SizedBox(height: 8),
-                for (int i = 0; i < _blocks.length; i++) _blockEditor(i),
+                ReorderableListView.builder(
+                  shrinkWrap: true,
+                  buildDefaultDragHandles: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _blocks.length,
+                  onReorder: (oldIndex, newIndex) {
+                    if (newIndex > oldIndex) newIndex--;
+                    final item = _blocks.removeAt(oldIndex);
+                    _blocks.insert(newIndex, item);
+                    setState(() {});
+                  },
+                  itemBuilder: (context, index) => _blockEditor(index),
+                ),
                 const SizedBox(height: 12),
                 Wrap(spacing: 8, children: [
                   ElevatedButton.icon(
@@ -531,6 +547,7 @@ class _LibrarySongEditorState extends ConsumerState<_LibrarySongEditor> {
   Widget _blockEditor(int index) {
     final b = _blocks[index];
     return Card(
+      key: ValueKey(b.id),
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Column(
