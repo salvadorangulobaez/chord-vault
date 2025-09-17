@@ -82,17 +82,47 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ],
         ],
       ),
-      body: viewAsGrid
-          ? Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 1.1,
-                ),
-                itemCount: sorted.length,
+      body: sorted.isEmpty
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.note_add,
+                    size: 64,
+                    color: Colors.grey,
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'No hay notas',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Toca el botón + para crear tu primera nota',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : viewAsGrid
+              ? Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: GridView.builder(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                      childAspectRatio: 1.1,
+                    ),
+                    itemCount: sorted.length,
                 itemBuilder: (context, index) {
                   final note = sorted[index];
                   final titles = note.songs.map((s) => _displayTitleWithKey(s.title, s.originalKey, 0)).toList();
@@ -165,7 +195,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 },
               ),
             )
-          : ListView.builder(
+              : ListView.builder(
               itemCount: sorted.length,
               itemBuilder: (context, index) {
                 final note = sorted[index];
