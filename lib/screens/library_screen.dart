@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../providers/app_providers.dart';
 import '../models/song.dart';
+import '../models/note.dart';
 import '../models/block.dart';
 import '../services/storage/hive_service.dart';
 import '../services/io/text_format.dart';
@@ -225,6 +226,73 @@ class LibraryScreen extends ConsumerWidget {
                       tooltip: 'Deseleccionar',
                     ),
                     const Spacer(),
+                    IconButton(
+                      onPressed: selectedSet.isEmpty
+                          ? null
+                          : () async {
+                              final toInsert = filtered.where((s) => selectedSet.contains(s.id)).toList();
+                              final notes = ref.read(notesProvider);
+                              if (notes.isEmpty) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context)
+                                      .showSnackBar(const SnackBar(content: Text('No hay notas disponibles')));
+                                }
+                                return;
+                              }
+                              
+                              final selectedNote = await showDialog<Note>(
+                                context: context,
+                                builder: (_) => AlertDialog(
+                                  title: const Text('Seleccionar nota'),
+                                  content: SizedBox(
+                                    width: double.maxFinite,
+                                    child: ListView.builder(
+                                      shrinkWrap: true,
+                                      itemCount: notes.length,
+                                      itemBuilder: (context, index) {
+                                        final note = notes[index];
+                                        return ListTile(
+                                          title: Text(note.title),
+                                          subtitle: Text('${note.songs.length} canciones'),
+                                          onTap: () => Navigator.pop(context, note),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: const Text('Cancelar'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              
+                              if (selectedNote != null) {
+                                final updatedSongs = [...selectedNote.songs, ...toInsert];
+                                final updatedNote = Note(
+                                  id: selectedNote.id,
+                                  title: selectedNote.title,
+                                  createdAt: selectedNote.createdAt,
+                                  updatedAt: DateTime.now(),
+                                  songs: updatedSongs,
+                                );
+                                ref.read(notesProvider.notifier).upsert(updatedNote);
+                                
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('${toInsert.length} canción(es) agregada(s) a "${selectedNote.title}"')),
+                                  );
+                                }
+                                
+                                // Salir del modo selección
+                                ref.read(_libSelectingProvider.notifier).state = false;
+                                ref.read(_libSelectedSetProvider.notifier).state = <String>{};
+                              }
+                            },
+                      icon: const Icon(Icons.add_to_queue),
+                      tooltip: 'Insertar en nota',
+                    ),
                     IconButton(
                       onPressed: selectedSet.isEmpty
                           ? null
