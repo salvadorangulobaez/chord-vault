@@ -52,7 +52,7 @@ class LibraryScreen extends ConsumerWidget {
             : [
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.only(left: 8.0, right: 16.0),
+                    padding: const EdgeInsets.only(left: 16.0, right: 8.0),
                     child: TextField(
                       decoration: const InputDecoration(
                         hintText: 'Buscar canciones...',
@@ -96,7 +96,7 @@ class LibraryScreen extends ConsumerWidget {
                     isScrollControlled: true,
                     builder: (_) => _ImportSongsSheet(),
                   ),
-                  icon: const Icon(Icons.content_paste),
+                  icon: const Icon(Icons.upload_file),
                 ),
               ],
       ),
@@ -642,16 +642,18 @@ class _ImportSongsSheetState extends ConsumerState<_ImportSongsSheet> {
                 ),
                 child: Column(
                   children: [
-                    TextField(
-                      controller: _textController,
-                      maxLines: null,
-                      expands: true,
-                      decoration: const InputDecoration(
-                        hintText: 'Pega aquí el texto de las canciones...',
-                        border: OutlineInputBorder(),
-                        alignLabelWithHint: true,
+                    Expanded(
+                      child: TextField(
+                        controller: _textController,
+                        maxLines: null,
+                        expands: true,
+                        decoration: const InputDecoration(
+                          hintText: 'Pega aquí el texto de las canciones...',
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
+                        ),
+                        autofocus: true,
                       ),
-                      autofocus: true,
                     ),
                     const SizedBox(height: 16),
                     Row(
