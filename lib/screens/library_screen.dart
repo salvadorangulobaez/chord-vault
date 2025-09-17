@@ -39,23 +39,28 @@ class LibraryScreen extends ConsumerWidget {
     final selectedSet = ref.watch(_libSelectedSetProvider);
     return Scaffold(
       appBar: AppBar(
-        title: SizedBox(
-          height: 40,
-          child: TextField(
-            decoration: InputDecoration(
-              hintText: 'Buscar en biblioteca',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: query.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () => ref.read(_libSearchProvider.notifier).state = '',
-                    )
-                  : null,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        title: GestureDetector(
+          onLongPress: () {
+            ref.read(_libSelectingProvider.notifier).state = true;
+          },
+          child: SizedBox(
+            height: 40,
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'Buscar en biblioteca',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: query.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () => ref.read(_libSearchProvider.notifier).state = '',
+                      )
+                    : null,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              onChanged: (v) => ref.read(_libSearchProvider.notifier).state = v,
             ),
-            onChanged: (v) => ref.read(_libSearchProvider.notifier).state = v,
           ),
         ),
         actions: [
@@ -119,14 +124,6 @@ class LibraryScreen extends ConsumerWidget {
               onPressed: () {
                 ref.read(_libSelectingProvider.notifier).state = false;
                 ref.read(_libSelectedSetProvider.notifier).state = <String>{};
-              },
-            )
-          else
-            IconButton(
-              tooltip: 'Exportar',
-              icon: const Icon(Icons.output),
-              onPressed: () {
-                ref.read(_libSelectingProvider.notifier).state = true;
               },
             ),
         ],
