@@ -167,9 +167,7 @@ class LibraryScreen extends ConsumerWidget {
                       },
                     )
                   : null,
-              contentPadding: selecting 
-                  ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
-                  : null,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               onTap: selecting
                   ? () {
                       final set = {...ref.read(_libSelectedSetProvider)};
@@ -469,11 +467,9 @@ class _LibrarySongEditorState extends ConsumerState<_LibrarySongEditor> {
       expand: false,
       initialChildSize: 0.9,
       builder: (_, controller) {
-        return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-          child: Scaffold(
-            resizeToAvoidBottomInset: true,
-            appBar: AppBar(
+        return Scaffold(
+          resizeToAvoidBottomInset: true,
+          appBar: AppBar(
               title: Text(widget.isNew ? 'Nueva en biblioteca' : 'Editar biblioteca'),
               actions: [
                 TextButton(
@@ -485,9 +481,9 @@ class _LibrarySongEditorState extends ConsumerState<_LibrarySongEditor> {
                 ),
               ],
             ),
-            body: ListView(
-              controller: controller,
-              padding: const EdgeInsets.all(12),
+          body: ListView(
+            controller: controller,
+            padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.of(context).viewInsets.bottom + 24),
               children: [
                 TextField(controller: _title, decoration: const InputDecoration(labelText: 'Título')),            
                 const SizedBox(height: 8),
