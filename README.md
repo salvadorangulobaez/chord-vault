@@ -190,15 +190,6 @@ Run tests with:
 flutter test
 ```
 
-## 📱 Supported Platforms
-
-- ✅ **Android** (API 21+)
-- ✅ **iOS** (iOS 11+)
-- ✅ **Windows** (Windows 10+)
-- ✅ **macOS** (macOS 10.14+)
-- ✅ **Linux** (Ubuntu 18.04+)
-- ✅ **Web** (Chrome, Firefox, Safari)
-
 ## 🔄 Data Flow
 
 1. **User Input** → UI Components
