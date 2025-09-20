@@ -4,7 +4,9 @@ import '../models/note.dart';
 import '../models/song.dart';
 import '../services/storage/hive_service.dart';
 
-final settingsProvider = StateProvider<SettingsState>((ref) => SettingsState());
+final settingsProvider = StateNotifierProvider<SettingsController, SettingsState>((ref) {
+  return SettingsController();
+});
 
 class SettingsState {
   SettingsState({this.preferSharps = true, this.fontScale = 1.0, this.readOnlyMode = false, this.gridView = false});
@@ -20,6 +22,40 @@ class SettingsState {
         readOnlyMode: readOnlyMode ?? this.readOnlyMode,
         gridView: gridView ?? this.gridView,
       );
+}
+
+class SettingsController extends StateNotifier<SettingsState> {
+  SettingsController() : super(SettingsState()) {
+    _load();
+  }
+
+  void _load() {
+    final box = HiveService.settingsBox;
+    final preferSharps = box.get('preferSharps', defaultValue: true) as bool;
+    final fontScale = box.get('fontScale', defaultValue: 1.0) as double;
+    final readOnlyMode = box.get('readOnlyMode', defaultValue: false) as bool;
+    final gridView = box.get('gridView', defaultValue: false) as bool;
+    
+    state = SettingsState(
+      preferSharps: preferSharps,
+      fontScale: fontScale,
+      readOnlyMode: readOnlyMode,
+      gridView: gridView,
+    );
+  }
+
+  void updateSettings(SettingsState newSettings) {
+    state = newSettings;
+    _save();
+  }
+
+  void _save() {
+    final box = HiveService.settingsBox;
+    box.put('preferSharps', state.preferSharps);
+    box.put('fontScale', state.fontScale);
+    box.put('readOnlyMode', state.readOnlyMode);
+    box.put('gridView', state.gridView);
+  }
 }
 
 final notesProvider = StateNotifierProvider<NotesController, List<Note>>((ref) {

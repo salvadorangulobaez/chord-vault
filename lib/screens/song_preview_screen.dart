@@ -83,6 +83,38 @@ class _SongPreviewScreenState extends ConsumerState<SongPreviewScreen> {
                 ),
             ],
           ),
+          // Controles de tamaño de fuente
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                onPressed: settings.fontScale > 0.8
+                    ? () {
+                        ref.read(settingsProvider.notifier).updateSettings(settings.copyWith(
+                          fontScale: (settings.fontScale - 0.1).clamp(0.8, 2.0),
+                        ));
+                      }
+                    : null,
+                icon: const Icon(Icons.text_decrease),
+                tooltip: 'Reducir fuente',
+              ),
+              Text(
+                '${(settings.fontScale * 100).round()}%',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              IconButton(
+                onPressed: settings.fontScale < 2.0
+                    ? () {
+                        ref.read(settingsProvider.notifier).updateSettings(settings.copyWith(
+                          fontScale: (settings.fontScale + 0.1).clamp(0.8, 2.0),
+                        ));
+                      }
+                    : null,
+                icon: const Icon(Icons.text_increase),
+                tooltip: 'Aumentar fuente',
+              ),
+            ],
+          ),
           // Menú de acciones
           PopupMenuButton<String>(
             onSelected: (value) async {
@@ -144,6 +176,7 @@ class _SongPreviewScreenState extends ConsumerState<SongPreviewScreen> {
                 _getTransposedTitle(song, _transposeBy, settings.preferSharps),
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
+                  fontSize: (Theme.of(context).textTheme.headlineSmall?.fontSize ?? 24) * settings.fontScale,
                 ),
               ),
               const SizedBox(height: 16),
@@ -158,6 +191,9 @@ class _SongPreviewScreenState extends ConsumerState<SongPreviewScreen> {
   }
 
   Widget _buildBlock(Block block, int transposeBy, bool preferSharps) {
+    final settings = ref.watch(settingsProvider);
+    final fontScale = settings.fontScale;
+    
     switch (block.type) {
       case BlockType.text:
         return Padding(
@@ -166,6 +202,7 @@ class _SongPreviewScreenState extends ConsumerState<SongPreviewScreen> {
             block.content,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
               fontWeight: FontWeight.w500,
+              fontSize: (Theme.of(context).textTheme.bodyLarge?.fontSize ?? 16) * fontScale,
             ),
           ),
         );
@@ -185,6 +222,7 @@ class _SongPreviewScreenState extends ConsumerState<SongPreviewScreen> {
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 fontFamily: 'monospace',
                 height: 1.4,
+                fontSize: (Theme.of(context).textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
               ),
             ),
           ),
@@ -208,6 +246,7 @@ class _SongPreviewScreenState extends ConsumerState<SongPreviewScreen> {
               block.content,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 fontStyle: FontStyle.italic,
+                fontSize: (Theme.of(context).textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
               ),
             ),
           ),

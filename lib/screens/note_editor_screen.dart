@@ -30,28 +30,66 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     final note = notes.firstWhere((n) => n.id == widget.noteId);
     return Scaffold(
       appBar: AppBar(
-        title: TextFormField(
-          initialValue: note.title,
-          decoration: const InputDecoration(border: InputBorder.none, hintText: 'Título de la nota'),
-          style: Theme.of(context).textTheme.titleLarge,
-          onChanged: (v) {
-            final updated = Note(
-              id: note.id,
-              title: v,
-              createdAt: note.createdAt,
-              updatedAt: DateTime.now(),
-              songs: note.songs,
-            );
-            ref.read(notesProvider.notifier).upsert(updated);
-          },
-        ),
+        title: settings.readOnlyMode
+            ? Text(
+                note.title,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontSize: 16, // Tamaño más pequeño en modo lectura
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              )
+            : TextFormField(
+                initialValue: note.title,
+                decoration: const InputDecoration(border: InputBorder.none, hintText: 'Título de la nota'),
+                style: Theme.of(context).textTheme.titleLarge,
+                onChanged: (v) {
+                  final updated = Note(
+                    id: note.id,
+                    title: v,
+                    createdAt: note.createdAt,
+                    updatedAt: DateTime.now(),
+                    songs: note.songs,
+                  );
+                  ref.read(notesProvider.notifier).upsert(updated);
+                },
+              ),
         actions: [
+          // Controles de tamaño de fuente (solo en modo lectura)
+          if (settings.readOnlyMode) ...[
+            IconButton(
+              onPressed: settings.fontScale > 0.8
+                  ? () {
+                      ref.read(settingsProvider.notifier).updateSettings(settings.copyWith(
+                        fontScale: (settings.fontScale - 0.1).clamp(0.8, 2.0),
+                      ));
+                    }
+                  : null,
+              icon: const Icon(Icons.text_decrease),
+              tooltip: 'Reducir fuente',
+            ),
+            Text(
+              '${(settings.fontScale * 100).round()}%',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            IconButton(
+              onPressed: settings.fontScale < 2.0
+                  ? () {
+                      ref.read(settingsProvider.notifier).updateSettings(settings.copyWith(
+                        fontScale: (settings.fontScale + 0.1).clamp(0.8, 2.0),
+                      ));
+                    }
+                  : null,
+              icon: const Icon(Icons.text_increase),
+              tooltip: 'Aumentar fuente',
+            ),
+          ],
           IconButton(
             tooltip: settings.readOnlyMode ? 'Modo edición' : 'Modo lectura',
             icon: Icon(settings.readOnlyMode ? Icons.edit : Icons.visibility),
             onPressed: () {
               final s = ref.read(settingsProvider);
-              ref.read(settingsProvider.notifier).state = s.copyWith(readOnlyMode: !s.readOnlyMode);
+              ref.read(settingsProvider.notifier).updateSettings(s.copyWith(readOnlyMode: !s.readOnlyMode));
             },
           ),
         ],
@@ -245,6 +283,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 ref.read(libraryProvider.notifier).upsert(libSong);
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Guardada en biblioteca')));
               },
+              fontScale: settings.fontScale,
             ),
           );
         },
@@ -443,6 +482,7 @@ class _SongCard extends StatelessWidget {
     required this.onDuplicate,
     required this.onDelete,
     required this.onSaveToLibrary,
+    required this.fontScale,
   });
 
   final Song song;
@@ -457,6 +497,7 @@ class _SongCard extends StatelessWidget {
   final VoidCallback onDuplicate;
   final VoidCallback onDelete;
   final VoidCallback onSaveToLibrary;
+  final double fontScale;
 
   @override
   Widget build(BuildContext context) {
@@ -507,7 +548,7 @@ class _SongCard extends StatelessWidget {
               _displayTitleWithKey(song.title, song.originalKey, semitones, preferSharps: preferSharps),
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
-                    fontSize: (Theme.of(context).textTheme.titleMedium?.fontSize ?? 16) + 1,
+                    fontSize: ((Theme.of(context).textTheme.titleMedium?.fontSize ?? 16) + 1) * fontScale,
                   ),
             ),
             const SizedBox(height: 8),
@@ -517,7 +558,10 @@ class _SongCard extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Text(
                     block.content.toUpperCase(),
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      fontSize: (Theme.of(context).textTheme.titleSmall?.fontSize ?? 14) * fontScale,
+                    ),
                   ),
                 )
               else if (block.type == BlockType.note)
@@ -525,7 +569,9 @@ class _SongCard extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Text(
                     block.content,
-                    style: Theme.of(context).textTheme.bodyMedium,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontSize: (Theme.of(context).textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
+                    ),
                   ),
                 )
               else
@@ -533,6 +579,7 @@ class _SongCard extends StatelessWidget {
                   content: block.content,
                   semitones: semitones,
                   preferSharps: preferSharps,
+                  fontScale: fontScale,
                 ),
             ],
           ],
@@ -561,11 +608,13 @@ class _ChordBlockView extends StatelessWidget {
     required this.content,
     required this.semitones,
     required this.preferSharps,
+    required this.fontScale,
   });
 
   final String content;
   final int semitones;
   final bool preferSharps;
+  final double fontScale;
 
   @override
   Widget build(BuildContext context) {
@@ -579,7 +628,7 @@ class _ChordBlockView extends StatelessWidget {
           for (final line in lines)
             Text(
               _transposeLine(line, semitones, options),
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+              style: TextStyle(fontFamily: 'monospace', fontSize: 13 * fontScale),
               softWrap: true,
               overflow: TextOverflow.visible,
             ),

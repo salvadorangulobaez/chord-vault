@@ -91,19 +91,18 @@ class LibraryScreen extends ConsumerWidget {
       ),
       body: Column(
         children: [
-          // Campo de búsqueda
-          if (!selecting)
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: TextField(
-                decoration: const InputDecoration(
-                  hintText: 'Buscar canciones...',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
-                ),
-                onChanged: (v) => ref.read(_libSearchProvider.notifier).state = v,
+          // Campo de búsqueda - siempre visible
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: TextField(
+              decoration: const InputDecoration(
+                hintText: 'Buscar canciones...',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
               ),
+              onChanged: (v) => ref.read(_libSearchProvider.notifier).state = v,
             ),
+          ),
           // Lista de canciones
           Expanded(
             child: filtered.isEmpty
