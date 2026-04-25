@@ -174,13 +174,41 @@ class LibraryScreen extends ConsumerWidget {
           // Lista de canciones
           Expanded(
             child: filtered.isEmpty
-                ? const Center(child: Text('No hay canciones en la biblioteca'))
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.library_music,
+                          size: 80,
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          'No hay canciones',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Añade o importa tu primera canción',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
                 : ListView.builder(
               itemCount: filtered.length,
               itemBuilder: (context, index) {
                 final s = filtered[index];
                 final selected = selectedSet.contains(s.id);
-                return InkWell(
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
                   onLongPress: selecting
                       ? null
                       : () {
@@ -204,7 +232,7 @@ class LibraryScreen extends ConsumerWidget {
                           );
                         },
                   child: ListTile(
-                    title: Text(s.title),
+                    title: Text(s.title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
                     subtitle: Text(s.originalKey ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
                     leading: selecting
                         ? Checkbox(
@@ -216,7 +244,7 @@ class LibraryScreen extends ConsumerWidget {
                             },
                           )
                         : null,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     trailing: selecting
                         ? null
                         : PopupMenuButton<String>(
@@ -263,6 +291,7 @@ class LibraryScreen extends ConsumerWidget {
                             ],
                           ),
                   ),
+                ),
                 );
               },
             ),

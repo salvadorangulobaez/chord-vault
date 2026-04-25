@@ -743,11 +743,17 @@ class _EmptyNotePlaceholder extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.library_music, size: 64, color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.8)),
-            const SizedBox(height: 12),
+            Icon(
+              Icons.library_music, 
+              size: 80, 
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+            ),
+            const SizedBox(height: 24),
             Text(
               'Tu nota está vacía',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 8),
             Text(

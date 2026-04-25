@@ -129,9 +129,14 @@ class _SongPreviewScreenState extends ConsumerState<SongPreviewScreen> {
         children: [
           // Barra de controles (transposición + fuente) — fuera del AppBar para evitar overflow
           Container(
+            margin: const EdgeInsets.all(12),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
             ),
             child: Row(
               children: [

@@ -10,7 +10,8 @@ class TextFormat {
         ? song.title
         : song.title.split(RegExp(r"\s*\(.*\)\s*$")).first.trim() + ' (' + song.originalKey! + ')';
     buffer.writeln(title);
-    for (final b in song.blocks) {
+    for (int i = 0; i < song.blocks.length; i++) {
+      final b = song.blocks[i];
       if (b.type == BlockType.text) {
         buffer.writeln(b.content.toUpperCase());
       } else if (b.type == BlockType.note) {
@@ -18,7 +19,6 @@ class TextFormat {
       } else {
         buffer.writeln(b.content);
       }
-      buffer.writeln();
     }
     return buffer.toString().trimRight();
   }
@@ -39,10 +39,6 @@ class TextFormat {
           buffer.writeln(b.content);
         case BlockType.note:
           buffer.writeln('// ${b.content}');
-      }
-      // Agregar línea en blanco entre bloques (excepto al final)
-      if (i < blocks.length - 1) {
-        buffer.writeln();
       }
     }
     return buffer.toString().trimRight();

@@ -49,9 +49,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       onPressed: () => ref.read(_searchQueryProvider.notifier).state = '',
                     )
                   : null,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
             onChanged: (v) => ref.read(_searchQueryProvider.notifier).state = v,
           ),
@@ -90,30 +87,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ],
       ),
       body: sorted.isEmpty
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                    Icons.note_add,
-                    size: 64,
-                    color: Colors.grey,
+                    Icons.queue_music,
+                    size: 80,
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 24),
                   Text(
                     'No hay notas',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
                     'Toca el botón + para crear tu primera nota',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -121,12 +115,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             )
           : viewAsGrid
               ? Padding(
-                  padding: const EdgeInsets.all(8.0),
+                  padding: const EdgeInsets.all(12.0),
                   child: GridView.builder(
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
                       childAspectRatio: 1.1,
                     ),
                     itemCount: sorted.length,
@@ -203,6 +197,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             )
               : ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               itemCount: sorted.length,
               itemBuilder: (context, index) {
                 final note = sorted[index];
@@ -216,9 +211,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ref.read(_homeSelectedSetProvider.notifier).state = set;
                     ref.read(_homeSelectingProvider.notifier).state = true;
                   },
+                  child: Card(
+                  margin: const EdgeInsets.only(bottom: 8),
                   child: Column(
                   children: [
                     ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       leading: selecting
                           ? Checkbox(
                               value: selected,
@@ -233,17 +231,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               },
                             )
                           : null,
-                      title: Text(note.title),
+                      title: Text(note.title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
                       subtitle: expanded
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                for (final t in songTitles)
-                                  Text(
-                                    '• ' + t,
-                                    style: Theme.of(context).textTheme.bodySmall,
-                                  ),
-                              ],
+                          ? Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  for (final t in songTitles)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 4),
+                                      child: Text(
+                                        '• ' + t,
+                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             )
                           : null,
                       trailing: selecting
@@ -252,7 +258,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  tooltip: expanded ? 'Contraer' : 'Descontraer',
+                                  tooltip: expanded ? 'Contraer' : 'Expandir',
                                   icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
                                   onPressed: () {
                                     final set = {...ref.read(_expandedNotesProvider)};
@@ -286,8 +292,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               );
                             },
                     ),
-                    const Divider(height: 0),
                   ],
+                ),
                 ),
                 );
               },
