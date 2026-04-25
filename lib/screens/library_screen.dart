@@ -1,15 +1,76 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../providers/app_providers.dart';
-import '../models/song.dart';
-import '../models/note.dart';
-import '../models/block.dart';
-import '../services/storage/hive_service.dart';
 import '../services/io/text_format.dart';
-import 'note_editor_screen.dart';
+import '../services/io/library_file.dart';
 import 'song_preview_screen.dart';
+import 'widgets/song_text_editor.dart';
+import 'widgets/insert_to_note_dialog.dart';
+
+Future<void> _importFromFile(BuildContext context, WidgetRef ref) async {
+  try {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    final path = result.files.single.path;
+    if (path == null) return;
+
+    if (context.mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    try {
+      final file = File(path);
+      final jsonStr = await file.readAsString();
+      final toImport = LibraryFile.importFromJson(jsonStr);
+      
+      final existing = ref.read(libraryProvider);
+      final nonDuplicates = LibraryFile.filterDuplicates(toImport, existing);
+      
+      for (final song in nonDuplicates) {
+        ref.read(libraryProvider.notifier).upsert(song);
+      }
+      
+      if (context.mounted) {
+        Navigator.pop(context); // close dialog
+        final duplicates = toImport.length - nonDuplicates.length;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Importadas ${nonDuplicates.length} canciones.' +
+              (duplicates > 0 ? ' ($duplicates duplicadas omitidas)' : '')
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // close dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al importar archivo: $e')),
+        );
+      }
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al abrir archivo: $e')),
+      );
+    }
+  }
+}
 
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
@@ -30,7 +91,7 @@ class LibraryScreen extends ConsumerWidget {
       case LibrarySort.alphaDesc:
         filtered.sort((a, b) => b.title.compareTo(a.title));
       case LibrarySort.updatedDesc:
-        filtered.sort((a, b) => (b.updatedAt ?? b.createdAt).compareTo(a.updatedAt ?? a.createdAt));
+        filtered.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       case LibrarySort.createdDesc:
         filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     }
@@ -66,26 +127,33 @@ class LibraryScreen extends ConsumerWidget {
                   onPressed: () => showModalBottomSheet(
                     context: context,
                     isScrollControlled: true,
-                    builder: (_) => _LibrarySongEditor(
-                      song: Song(
-                        id: HiveService.newId(),
-                        title: '',
-                        blocks: [],
-                        createdAt: DateTime.now(),
-                        updatedAt: DateTime.now(),
-                      ),
-                      isNew: true,
+                    builder: (_) => SongTextEditor(
+                      title: 'Nueva en biblioteca',
+                      onSave: (song) {
+                        ref.read(libraryProvider.notifier).upsert(song);
+                      },
                     ),
                   ),
                   icon: const Icon(Icons.add),
                 ),
-                IconButton(
-                  onPressed: () => showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    builder: (_) => _ImportSongsSheet(),
-                  ),
-                  icon: const Icon(Icons.upload_file),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.library_add),
+                  tooltip: 'Añadir a biblioteca',
+                  onSelected: (val) async {
+                    if (val == 'text') {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (_) => _ImportSongsSheet(),
+                      );
+                    } else if (val == 'file') {
+                      await _importFromFile(context, ref);
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'text', child: Text('Importar desde texto')),
+                    PopupMenuItem(value: 'file', child: Text('Importar desde archivo (.chordvault)')),
+                  ],
                 ),
               ],
       ),
@@ -158,7 +226,13 @@ class LibraryScreen extends ConsumerWidget {
                                   showModalBottomSheet(
                                     context: context,
                                     isScrollControlled: true,
-                                    builder: (_) => _LibrarySongEditor(song: s, isNew: false),
+                                    builder: (_) => SongTextEditor(
+                                      initialSong: s,
+                                      title: 'Editar en biblioteca',
+                                      onSave: (updated) {
+                                        ref.read(libraryProvider.notifier).upsert(updated);
+                                      },
+                                    ),
                                   );
                                 case 'delete':
                                   final confirm = await showDialog<bool>(
@@ -219,136 +293,10 @@ class LibraryScreen extends ConsumerWidget {
                         ? null
                         : () async {
                             final toInsert = library.where((s) => selectedSet.contains(s.id)).toList();
-                            final notes = ref.read(notesProvider);
-                            
-                            final result = await showModalBottomSheet<Note?>(
-                              context: context,
-                              isScrollControlled: true,
-                              builder: (_) => DraggableScrollableSheet(
-                                expand: false,
-                                initialChildSize: 0.7,
-                                maxChildSize: 0.9,
-                                minChildSize: 0.3,
-                                builder: (_, controller) => Scaffold(
-                                  appBar: AppBar(
-                                    title: const Text('Insertar canciones'),
-                                    automaticallyImplyLeading: false,
-                                    actions: [
-                                      IconButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        icon: const Icon(Icons.close),
-                                      ),
-                                    ],
-                                  ),
-                                  body: ListView(
-                                    controller: controller,
-                                    children: [
-                                      ListTile(
-                                        leading: const Icon(Icons.add, color: Colors.green),
-                                        title: const Text('Nueva nota'),
-                                        subtitle: const Text('Crear una nueva nota'),
-                                        onTap: () => Navigator.pop(context, null), // null = nueva nota
-                                      ),
-                                      const Divider(),
-                                      ...notes.map((note) => ListTile(
-                                        title: Text(note.title),
-                                        subtitle: Text('${note.songs.length} canciones'),
-                                        onTap: () => Navigator.pop(context, note),
-                                      )),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                            
-                            // result puede ser null (nueva nota), una Note (nota existente), o null (cancelado)
-                            if (result != null || result == null) {
-                              // Si result es null, significa que se seleccionó "Nueva nota"
-                              if (result == null) {
-                                // Crear nueva nota
-                                final newNoteTitle = await showDialog<String>(
-                                  context: context,
-                                  builder: (_) {
-                                    final ctrl = TextEditingController();
-                                    return AlertDialog(
-                                      title: const Text('Nueva nota'),
-                                      content: TextField(
-                                        controller: ctrl,
-                                        decoration: const InputDecoration(
-                                          labelText: 'Título de la nota',
-                                          hintText: 'Mi nueva nota',
-                                        ),
-                                        autofocus: true,
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(context),
-                                          child: const Text('Cancelar'),
-                                        ),
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(context, ctrl.text.trim()),
-                                          child: const Text('Crear'),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                );
-                                
-                                if (newNoteTitle != null && newNoteTitle.isNotEmpty) {
-                                  final newNote = Note(
-                                    id: HiveService.newId(),
-                                    title: newNoteTitle,
-                                    createdAt: DateTime.now(),
-                                    updatedAt: DateTime.now(),
-                                    songs: toInsert,
-                                  );
-                                  ref.read(notesProvider.notifier).upsert(newNote);
-                                  
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('${toInsert.length} canción(es) agregada(s) a nueva nota "$newNoteTitle"')),
-                                    );
-                                    
-                                    // Navegar a la nueva nota
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => NoteEditorScreen(noteId: newNote.id),
-                                      ),
-                                    );
-                                  }
-                                }
-                              } else {
-                                // Agregar a nota existente
-                                final updatedSongs = [...result.songs, ...toInsert];
-                                final updatedNote = Note(
-                                  id: result.id,
-                                  title: result.title,
-                                  createdAt: result.createdAt,
-                                  updatedAt: DateTime.now(),
-                                  songs: updatedSongs,
-                                );
-                                ref.read(notesProvider.notifier).upsert(updatedNote);
-                                
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('${toInsert.length} canción(es) agregada(s) a "${result.title}"')),
-                                  );
-                                  
-                                  // Navegar a la nota existente
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => NoteEditorScreen(noteId: result.id),
-                                    ),
-                                  );
-                                }
-                              }
-                              
-                              // Salir del modo selección
-                              ref.read(_libSelectingProvider.notifier).state = false;
-                              ref.read(_libSelectedSetProvider.notifier).state = <String>{};
-                            }
+                            await insertSongsToNote(context, ref, toInsert);
+                            // Exit selection mode
+                            ref.read(_libSelectingProvider.notifier).state = false;
+                            ref.read(_libSelectedSetProvider.notifier).state = <String>{};
                           },
                     icon: const Icon(Icons.add_to_queue),
                     tooltip: 'Insertar en nota',
@@ -385,21 +333,58 @@ class LibraryScreen extends ConsumerWidget {
                     icon: const Icon(Icons.delete),
                     tooltip: 'Eliminar seleccionadas',
                   ),
-                  IconButton(
-                    onPressed: selectedSet.isEmpty
-                        ? null
-                        : () async {
-                            final toExport = library.where((s) => selectedSet.contains(s.id)).toList();
-                            final text = TextFormat.exportSongs(toExport);
-                            await Clipboard.setData(ClipboardData(text: text));
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('${toExport.length} canción(es) exportada(s)')),
+                  PopupMenuButton<String>(
+                    enabled: selectedSet.isNotEmpty,
+                    icon: const Icon(Icons.share),
+                    tooltip: 'Compartir / Exportar',
+                    onSelected: (val) async {
+                      final toExport = library.where((s) => selectedSet.contains(s.id)).toList();
+                      if (val == 'text') {
+                        final text = TextFormat.exportSongs(toExport);
+                        await Clipboard.setData(ClipboardData(text: text));
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('${toExport.length} canción(es) copiadas al portapapeles')),
+                          );
+                        }
+                      } else if (val == 'file') {
+                        try {
+                          final jsonStr = LibraryFile.exportToJson(toExport);
+                          final dir = await getTemporaryDirectory();
+                          final file = File('${dir.path}/exportacion_cancionero.chordvault');
+                          await file.writeAsString(jsonStr);
+                          
+                          if (context.mounted) {
+                            final box = context.findRenderObject() as RenderBox?;
+                            if (box != null) {
+                              await Share.shareXFiles(
+                                [XFile(file.path)],
+                                text: 'Exportación de ChordVault (${toExport.length} canciones)',
+                                sharePositionOrigin: box.localToGlobal(Offset.zero) & box.size,
+                              );
+                            } else {
+                              await Share.shareXFiles(
+                                [XFile(file.path)],
+                                text: 'Exportación de ChordVault (${toExport.length} canciones)',
                               );
                             }
-                          },
-                    icon: const Icon(Icons.file_upload),
-                    tooltip: 'Exportar seleccionados',
+                            
+                            ref.read(_libSelectingProvider.notifier).state = false;
+                            ref.read(_libSelectedSetProvider.notifier).state = <String>{};
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error al exportar: $e')),
+                            );
+                          }
+                        }
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'text', child: Text('Copiar como texto')),
+                      PopupMenuItem(value: 'file', child: Text('Exportar como archivo (.chordvault)')),
+                    ],
                   ),
                 ],
               ),
@@ -415,175 +400,7 @@ final _libSortProvider = StateProvider<LibrarySort>((ref) => LibrarySort.updated
 final _libSelectingProvider = StateProvider<bool>((ref) => false);
 final _libSelectedSetProvider = StateProvider<Set<String>>((ref) => <String>{});
 
-class _LibrarySongEditor extends ConsumerStatefulWidget {
-  const _LibrarySongEditor({required this.song, required this.isNew});
-  final Song song;
-  final bool isNew;
-
-  @override
-  ConsumerState<_LibrarySongEditor> createState() => _LibrarySongEditorState();
-}
-
-class _LibrarySongEditorState extends ConsumerState<_LibrarySongEditor> {
-  late TextEditingController _title;
-  late TextEditingController _key;
-  late List<Block> _blocks;
-
-  @override
-  void initState() {
-    super.initState();
-    _title = TextEditingController(text: widget.song.title);
-    _key = TextEditingController(text: widget.song.originalKey ?? '');
-    _blocks = widget.song.blocks.map((b) => Block(id: b.id, type: b.type, content: b.content)).toList();
-  }
-
-  @override
-  void dispose() {
-    _title.dispose();
-    _key.dispose();
-    super.dispose();
-  }
-
-  void _save() {
-    final updated = Song(
-      id: widget.song.id,
-      title: _title.text.trim().isEmpty ? 'Sin título' : _title.text.trim(),
-      blocks: _blocks,
-      originalKey: _key.text.trim().isEmpty ? null : _key.text.trim(),
-      tags: widget.song.tags,
-      author: widget.song.author,
-      isFavorite: widget.song.isFavorite,
-      createdAt: widget.song.createdAt,
-      updatedAt: DateTime.now(),
-    );
-    ref.read(libraryProvider.notifier).upsert(updated);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.9,
-      builder: (_, controller) {
-        return Scaffold(
-          resizeToAvoidBottomInset: true,
-          appBar: AppBar(
-            title: Text(widget.isNew ? 'Nueva en biblioteca' : 'Editar biblioteca'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  _save();
-                  Navigator.pop(context);
-                },
-                child: const Text('Guardar'),
-              ),
-            ],
-          ),
-          body: ListView(
-            controller: controller,
-            padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.of(context).viewInsets.bottom + 24),
-            children: [
-              TextField(controller: _title, decoration: const InputDecoration(labelText: 'Título')),            
-              const SizedBox(height: 8),
-              TextField(controller: _key, decoration: const InputDecoration(labelText: 'Tono (opcional)')),
-              const SizedBox(height: 8),
-              ReorderableListView.builder(
-                shrinkWrap: true,
-                buildDefaultDragHandles: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _blocks.length,
-                onReorder: (oldIndex, newIndex) {
-                  if (newIndex > oldIndex) newIndex--;
-                  final item = _blocks.removeAt(oldIndex);
-                  _blocks.insert(newIndex, item);
-                  setState(() {});
-                },
-                itemBuilder: (context, index) => _blockEditor(index),
-              ),
-              const SizedBox(height: 12),
-              Wrap(spacing: 8, children: [
-                ElevatedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _blocks.add(Block(id: HiveService.newId(), type: BlockType.text, content: 'INTRO'));
-                    });
-                  },
-                  icon: const Icon(Icons.label),
-                  label: const Text('Agregar etiqueta'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _blocks.add(Block(id: HiveService.newId(), type: BlockType.chords, content: ''));
-                    });
-                  },
-                  icon: const Icon(Icons.music_note),
-                  label: const Text('Agregar acordes'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _blocks.add(Block(id: HiveService.newId(), type: BlockType.note, content: ''));
-                    });
-                  },
-                  icon: const Icon(Icons.note_alt),
-                  label: const Text('Agregar nota'),
-                ),
-              ]),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _blockEditor(int index) {
-    final b = _blocks[index];
-    return Card(
-      key: ValueKey(b.id),
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                DropdownButton<BlockType>(
-                  value: b.type,
-                  items: const [
-                    DropdownMenuItem(value: BlockType.text, child: Text('Etiqueta')),
-                    DropdownMenuItem(value: BlockType.chords, child: Text('Acordes')),
-                    DropdownMenuItem(value: BlockType.note, child: Text('Nota')),
-                  ],
-                  onChanged: (t) {
-                    if (t != null) {
-                      setState(() {
-                        _blocks[index] = Block(id: b.id, type: t, content: b.content);
-                      });
-                    }
-                  },
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => setState(() => _blocks.removeAt(index)),
-                  icon: const Icon(Icons.delete),
-                ),
-              ],
-            ),
-            TextField(
-              controller: TextEditingController(text: b.content),
-              maxLines: b.type == BlockType.chords ? null : 3,
-              decoration: InputDecoration(
-                labelText: b.type == BlockType.chords ? 'Acordes' : (b.type == BlockType.text ? 'Etiqueta' : 'Nota'),
-              ),
-              onChanged: (v) => _blocks[index] = Block(id: b.id, type: b.type, content: v),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// _LibrarySongEditor removed — replaced by SongTextEditor widget
 
 class _ImportSongsSheet extends ConsumerStatefulWidget {
   @override
@@ -594,7 +411,18 @@ class _ImportSongsSheetState extends ConsumerState<_ImportSongsSheet> {
   final TextEditingController _textController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    _textController.addListener(_onTextChanged);
+  }
+
+  void _onTextChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    _textController.removeListener(_onTextChanged);
     _textController.dispose();
     super.dispose();
   }

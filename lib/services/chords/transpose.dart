@@ -1,10 +1,12 @@
-/// Transposición robusta de acordes.
-/// Soporta:
-/// - Notas con sostenidos/bemoles (incluyendo ♯/♭),
-/// - Sufijos y modificadores (m, maj7, sus4, add9, dim, aug, b5, #11 ...),
-/// - Bajo con slash E/G# conservando sufijos,
-/// - Preferencia de notación con sostenidos o bemoles,
-/// - Tokens complejos con '-' sin dividirlos.
+// Transposición robusta de acordes.
+// Soporta:
+// - Notas con sostenidos/bemoles (incluyendo ♯/♭),
+// - Sufijos y modificadores (m, maj7, sus4, add9, dim, aug, b5, #11 ...),
+// - Bajo con slash E/G# conservando sufijos,
+// - Preferencia de notación con sostenidos o bemoles,
+// - Tokens complejos con '-' y paréntesis.
+
+import 'parser.dart';
 
 class TransposeOptions {
   const TransposeOptions({this.preferSharps = true});
@@ -104,7 +106,6 @@ class ChordTokenParsed {
 }
 
 final RegExp _rootStart = RegExp(r'^([A-G](?:#|b|♯|♭)?)');
-final RegExp _slash = RegExp(r'/');
 
 ChordTokenParsed? parseChordToken(String token) {
   final m = _rootStart.firstMatch(token);
@@ -112,90 +113,165 @@ ChordTokenParsed? parseChordToken(String token) {
   String head = token.substring(0, m.group(0)!.length);
   String rest = token.substring(m.group(0)!.length);
   String? bass;
-  if (_slash.hasMatch(rest)) {
-    final parts = rest.split('/');
-    rest = parts.first;
-    final bassRaw = parts.sublist(1).join('/'); // por si hubiera múltiples '/'
-    final bassMatch = _rootStart.firstMatch(bassRaw);
+
+  // Buscar slash para nota de bajo. Usar lastIndexOf para manejar
+  // casos como Am7/G donde hay un solo slash.
+  final slashIdx = rest.lastIndexOf('/');
+  if (slashIdx >= 0) {
+    final afterSlash = rest.substring(slashIdx + 1);
+    final bassMatch = _rootStart.firstMatch(afterSlash);
     if (bassMatch != null) {
-      bass = bassRaw.substring(0, bassMatch.group(0)!.length);
-      // mantener cualquier sufijo raro después del bajo como parte del sufijo total
-      final remaining = bassRaw.substring(bassMatch.group(0)!.length);
+      bass = afterSlash.substring(0, bassMatch.group(0)!.length);
+      final remaining = afterSlash.substring(bassMatch.group(0)!.length);
+      rest = rest.substring(0, slashIdx);
       if (remaining.isNotEmpty) {
-        rest += '/' + remaining;
+        rest += remaining;
       }
-    } else {
-      // slash sin nota válida => tratar todo como sufijo
-      rest = '/' + bassRaw + rest;
     }
   }
   return ChordTokenParsed(root: head, suffix: rest, bass: bass);
 }
 
+/// Transpone un token de acorde completo.
+///
+/// Maneja en orden limpio y sin ambigüedad:
+/// 1. Paréntesis exteriores -> strip, recurse, re-envolver
+/// 2. Dash '-' a nivel superior -> split, transponer cada parte, rejoin
+/// 3. Grupos parentéticos internos (p.ej. A(C)) -> transponer fuera y dentro
+/// 4. Acorde simple -> parsear root+suffix+bass, transponer
 String transposeToken(String token, int semitones, TransposeOptions options) {
-  // Si el token es un acorde entre paréntesis, transponer el contenido y mantener los paréntesis
-  if (token.startsWith('(') && token.endsWith(')')) {
-    final innerToken = token.substring(1, token.length - 1);
-    final transposedInner = transposeToken(innerToken, semitones, options);
+  final trimmed = token.trim();
+  if (trimmed.isEmpty) return token;
+
+  // Paso 1: Strip paréntesis exteriores
+  if (_isWrappedInBalancedParens(trimmed)) {
+    final inner = trimmed.substring(1, trimmed.length - 1);
+    final transposedInner = inner.contains(RegExp(r'\s'))
+        ? _transposeSpaceSeparated(inner, semitones, options)
+        : transposeToken(inner, semitones, options);
     return '($transposedInner)';
   }
-  
-  // Si el token contiene paréntesis en el medio o al final (ej: A(C), (C)-A, (G A A B C D E G))
-  if (token.contains('(') && token.contains(')')) {
-    // Caso especial: si todo el contenido está entre paréntesis y contiene espacios
-    if (token.startsWith('(') && token.endsWith(')')) {
-      final inner = token.substring(1, token.length - 1);
-      // Si contiene espacios, es una secuencia de acordes
-      if (inner.contains(' ')) {
-        final chords = inner.split(' ').map((c) => transposeToken(c.trim(), semitones, options)).join(' ');
-        return '($chords)';
-      }
-    }
-    
-    // Caso general: transponer cada parte del token que esté entre paréntesis
-    String result = token;
-    final regex = RegExp(r'\(([^)]+)\)');
-    final matches = regex.allMatches(token);
-    
-    for (final match in matches) {
-      final original = match.group(0)!; // (C)
-      final inner = match.group(1)!; // C
-      final transposedInner = transposeToken(inner, semitones, options);
-      result = result.replaceFirst(original, '($transposedInner)');
-    }
-    
-    // Transponer las partes que no están entre paréntesis
-    final parts = result.split(RegExp(r'[()]'));
-    for (int i = 0; i < parts.length; i += 2) { // Solo las partes pares (no entre paréntesis)
-      if (parts[i].isNotEmpty) {
-        parts[i] = _transposeSingleToken(parts[i], semitones, options);
-      }
-    }
-    
-    // Reconstruir el token
-    final buffer = StringBuffer();
-    for (int i = 0; i < parts.length; i++) {
-      buffer.write(parts[i]);
-      if (i < parts.length - 1) {
-        buffer.write(i % 2 == 0 ? '(' : ')');
-      }
-    }
-    return buffer.toString();
-  }
-  
-  // Si el token contiene subacordes unidos con '-', transponer cada parte.
-  if (token.contains('-')) {
-    final parts = token.split('-');
-    final transposed = parts.map((p) {
-      final single = _transposeSingleToken(p, semitones, options);
-      return single;
+
+  // Paso 2: Si contiene '-', split a nivel superior y transponer cada parte
+  final dashParts = _splitTopLevel(trimmed, '-');
+  if (dashParts.length > 1) {
+    final transposed = dashParts.map((p) {
+      if (p.isEmpty) return p;
+      return transposeToken(p, semitones, options);
     }).toList();
     return transposed.join('-');
   }
-  return _transposeSingleToken(token, semitones, options);
+
+  // Paso 3: Paréntesis internos (p.ej. A(C), A(B-C), etc.)
+  if (trimmed.contains('(') && trimmed.contains(')')) {
+    return _transposeParentheticalSegments(trimmed, semitones, options);
+  }
+
+  // Paso 4: Transponer como acorde simple
+  return _transposeSingleToken(trimmed, semitones, options);
+}
+
+bool _isWrappedInBalancedParens(String token) {
+  if (token.length < 2) return false;
+  if (!token.startsWith('(') || !token.endsWith(')')) return false;
+
+  var depth = 0;
+  for (var i = 0; i < token.length; i++) {
+    final ch = token[i];
+    if (ch == '(') {
+      depth++;
+    } else if (ch == ')') {
+      depth--;
+      if (depth < 0) return false;
+      if (depth == 0 && i < token.length - 1) return false;
+    }
+  }
+  return depth == 0;
+}
+
+List<String> _splitTopLevel(String token, String separator) {
+  final parts = <String>[];
+  var depth = 0;
+  var start = 0;
+
+  for (var i = 0; i < token.length; i++) {
+    final ch = token[i];
+    if (ch == '(') {
+      depth++;
+    } else if (ch == ')') {
+      if (depth > 0) depth--;
+    } else if (depth == 0 && ch == separator) {
+      parts.add(token.substring(start, i));
+      start = i + 1;
+    }
+  }
+
+  parts.add(token.substring(start));
+  return parts;
+}
+
+String _transposeSpaceSeparated(String inner, int semitones, TransposeOptions options) {
+  final tokens = inner.trim().split(RegExp(r'\s+')).where((t) => t.isNotEmpty);
+  return tokens.map((t) => transposeToken(t, semitones, options)).join(' ');
+}
+
+String _transposeParentheticalSegments(String token, int semitones, TransposeOptions options) {
+  final out = StringBuffer();
+  var i = 0;
+
+  while (i < token.length) {
+    final open = token.indexOf('(', i);
+    if (open == -1) {
+      final tail = token.substring(i);
+      out.write(_transposeSingleToken(tail, semitones, options));
+      break;
+    }
+
+    final prefix = token.substring(i, open);
+    if (prefix.isNotEmpty) {
+      out.write(_transposeSingleToken(prefix, semitones, options));
+    }
+
+    var depth = 0;
+    var close = -1;
+    for (var j = open; j < token.length; j++) {
+      final ch = token[j];
+      if (ch == '(') {
+        depth++;
+      } else if (ch == ')') {
+        depth--;
+        if (depth == 0) {
+          close = j;
+          break;
+        }
+      }
+    }
+
+    if (close == -1) {
+      // Paréntesis desbalanceados: fallback seguro.
+      out.write(_transposeSingleToken(token.substring(open), semitones, options));
+      break;
+    }
+
+    final inner = token.substring(open + 1, close);
+    out.write('(');
+    out.write(inner.contains(RegExp(r'\s'))
+        ? _transposeSpaceSeparated(inner, semitones, options)
+        : transposeToken(inner, semitones, options));
+    out.write(')');
+
+    i = close + 1;
+  }
+
+  return out.toString();
 }
 
 String _transposeSingleToken(String token, int semitones, TransposeOptions options) {
+  final parsedByLine = parseLineToTokens(token);
+  if (parsedByLine.length != 1 || !parsedByLine.first.isChord || parsedByLine.first.raw != token) {
+    return token;
+  }
+
   final parsed = parseChordToken(token);
   if (parsed == null) return token;
   final rootIdx = _noteToIndex(parsed.root);
@@ -210,5 +286,3 @@ String _transposeSingleToken(String token, int semitones, TransposeOptions optio
   }
   return newBass == null ? '$newRoot${parsed.suffix}' : '$newRoot${parsed.suffix}/$newBass';
 }
-
-

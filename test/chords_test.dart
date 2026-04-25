@@ -96,7 +96,7 @@ void main() {
     test('Preferencia de bemoles', () {
       final out = transposeToken('F#', 1, const TransposeOptions(preferSharps: false));
       expect(out, 'G');
-      final out2 = transposeToken('G#', 1, const TransposeOptions(preferSharps: false));
+      final out2 = transposeToken('G#', 0, const TransposeOptions(preferSharps: false));
       expect(out2, 'Ab');
     });
 

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../providers/app_providers.dart';
 import '../models/note.dart';
@@ -10,6 +12,8 @@ import '../services/chords/transpose.dart';
 import '../services/storage/hive_service.dart';
 import '../services/clipboard/song_clipboard.dart';
 import '../services/io/text_format.dart';
+import '../utils/title_utils.dart';
+import 'widgets/song_text_editor.dart';
 
 class NoteEditorScreen extends ConsumerStatefulWidget {
   const NoteEditorScreen({super.key, required this.noteId});
@@ -109,7 +113,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 opacity: 0.9,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.2),
+                    color: Colors.grey.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: child,
@@ -207,13 +211,25 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 await showModalBottomSheet(
                   context: context,
                   isScrollControlled: true,
-                  builder: (_) => _SongEditorSheet(
-                    note: note,
-                    song: song,
-                    onOriginalKeyChanged: () {
-                      setState(() {
+                  builder: (_) => SongTextEditor(
+                    initialSong: song,
+                    title: 'Editar canción',
+                    onSave: (updatedSong) {
+                      // Si cambia el tono original, reseteamos transposición
+                      if (song.originalKey != updatedSong.originalKey) {
                         _transposeBySong[song.id] = 0;
-                      });
+                      }
+                      final updatedNote = Note(
+                        id: note.id,
+                        title: note.title,
+                        createdAt: note.createdAt,
+                        updatedAt: DateTime.now(),
+                        songs: [
+                          for (final s in note.songs)
+                            if (s.id == song.id) updatedSong else s
+                        ],
+                      );
+                      ref.read(notesProvider.notifier).upsert(updatedNote);
                     },
                   ),
                 );
@@ -222,9 +238,8 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
               onCopy: () async {
                 await copySongToClipboard(song);
                 ref.read(clipboardSongAvailableProvider.notifier).state = true;
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Canción copiada')));
-                }
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Canción copiada')));
               },
               onDuplicate: () {
                 final newSong = Song(
@@ -360,25 +375,20 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                   FloatingActionButton.extended(
                     heroTag: 'fab-add-song',
                     onPressed: () async {
-                      final song = Song(id: HiveService.newId(), title: 'Nueva canción', blocks: []);
-                      final updated = Note(
-                        id: note.id,
-                        title: note.title,
-                        createdAt: note.createdAt,
-                        updatedAt: DateTime.now(),
-                        songs: [...note.songs, song],
-                      );
-                      ref.read(notesProvider.notifier).upsert(updated);
                       await showModalBottomSheet(
                         context: context,
                         isScrollControlled: true,
-                        builder: (_) => _SongEditorSheet(
-                          note: updated,
-                          song: song,
-                          onOriginalKeyChanged: () {
-                            setState(() {
-                              _transposeBySong[song.id] = 0;
-                            });
+                        builder: (_) => SongTextEditor(
+                          title: 'Nueva canción',
+                          onSave: (song) {
+                            final updated = Note(
+                              id: note.id,
+                              title: note.title,
+                              createdAt: note.createdAt,
+                              updatedAt: DateTime.now(),
+                              songs: [...note.songs, song],
+                            );
+                            ref.read(notesProvider.notifier).upsert(updated);
                           },
                         ),
                       );
@@ -407,9 +417,8 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                       onPressed: () async {
                         final paste = await pasteSongFromClipboard();
                         if (paste == null) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Portapapeles sin canción válida')));
-                          }
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Portapapeles sin canción válida')));
                           return;
                         }
                         final updated = Note(
@@ -421,9 +430,8 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                         );
                         ref.read(notesProvider.notifier).upsert(updated);
                         ref.read(clipboardSongAvailableProvider.notifier).state = false;
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Canción pegada')));
-                        }
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Canción pegada')));
                       },
                       icon: const Icon(Icons.paste),
                       label: const Text('Pegar canción'),
@@ -520,6 +528,19 @@ class _SongCard extends StatelessWidget {
                 PopupMenuButton<String>(
                   onSelected: (value) async {
                     switch (value) {
+                      case 'export_text':
+                        final text = TextFormat.exportSong(song);
+                        await Clipboard.setData(ClipboardData(text: text));
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Canción copiada como texto')),
+                          );
+                        }
+                        break;
+                      case 'share':
+                        final text = TextFormat.exportSong(song);
+                        await Share.share(text);
+                        break;
                       case 'copy':
                         onCopy();
                         break;
@@ -535,7 +556,10 @@ class _SongCard extends StatelessWidget {
                     }
                   },
                   itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'copy', child: Text('Copiar')),
+                    PopupMenuItem(value: 'export_text', child: Text('Copiar como texto')),
+                    PopupMenuItem(value: 'share', child: Text('Compartir')),
+                    PopupMenuDivider(),
+                    PopupMenuItem(value: 'copy', child: Text('Copiar (interno)')),
                     PopupMenuItem(value: 'duplicate', child: Text('Duplicar')),
                     PopupMenuItem(value: 'save_library', child: Text('Guardar en biblioteca')),
                     PopupMenuItem(value: 'delete', child: Text('Eliminar')),
@@ -545,7 +569,7 @@ class _SongCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              _displayTitleWithKey(song.title, song.originalKey, semitones, preferSharps: preferSharps),
+              displayTitleWithKey(song.title, song.originalKey, semitones, preferSharps: preferSharps),
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                     fontSize: ((Theme.of(context).textTheme.titleMedium?.fontSize ?? 16) + 1) * fontScale,
@@ -567,11 +591,25 @@ class _SongCard extends StatelessWidget {
               else if (block.type == BlockType.note)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(
-                    block.content,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontSize: (Theme.of(context).textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
-                    ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.chat_bubble_outline,
+                        size: 14 * fontScale,
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          block.content,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontStyle: FontStyle.italic,
+                            fontSize: (Theme.of(context).textTheme.bodyMedium?.fontSize ?? 14) * fontScale,
+                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 )
               else
@@ -589,19 +627,7 @@ class _SongCard extends StatelessWidget {
   }
 }
 
-String _displayTitleWithKey(String title, String? originalKey, int semitones, {required bool preferSharps}) {
-  // Si no hay tono definido, intenta detectar uno entre paréntesis ya existente.
-  String baseTitle = title;
-  String? key = originalKey;
-  final match = RegExp(r"^(.*)\(([^)]+)\)\s*$").firstMatch(title);
-  if (match != null) {
-    baseTitle = match.group(1)!.trim();
-    key ??= match.group(2)!.trim();
-  }
-  if (key == null || key.isEmpty) return baseTitle;
-  final transposed = transposeKey(key, semitones, preferSharps: preferSharps);
-  return baseTitle.isEmpty ? transposed : baseTitle + ' (' + transposed + ')';
-}
+
 
 class _ChordBlockView extends StatelessWidget {
   const _ChordBlockView({
@@ -643,207 +669,7 @@ class _ChordBlockView extends StatelessWidget {
   }
 }
 
-class _SongEditorSheet extends ConsumerStatefulWidget {
-  const _SongEditorSheet({required this.note, required this.song, this.onOriginalKeyChanged});
-  final Note note;
-  final Song song;
-  final VoidCallback? onOriginalKeyChanged;
-
-  @override
-  ConsumerState<_SongEditorSheet> createState() => _SongEditorSheetState();
-}
-
-class _SongEditorSheetState extends ConsumerState<_SongEditorSheet> {
-  late TextEditingController _titleCtrl;
-  late TextEditingController _keyCtrl;
-  late List<Block> _blocks;
-  @override
-  void initState() {
-    super.initState();
-    _titleCtrl = TextEditingController(text: widget.song.title);
-    _keyCtrl = TextEditingController(text: widget.song.originalKey ?? '');
-    _blocks = widget.song.blocks
-        .map((b) => Block(id: b.id, type: b.type, content: b.content))
-        .toList();
-  }
-
-  @override
-  void dispose() {
-    _titleCtrl.dispose();
-    _keyCtrl.dispose();
-    super.dispose();
-  }
-
-  void _save(Note note, Song song, List<Block> blocks, String title) {
-    final updatedSong = Song(
-      id: song.id,
-      title: title,
-      blocks: blocks,
-      originalKey: _keyCtrl.text.trim().isEmpty ? null : _keyCtrl.text.trim(),
-      tags: song.tags,
-      author: song.author,
-      isFavorite: song.isFavorite,
-    );
-    // Si cambia el tono original, reseteamos transposición de vista para esta canción
-    final prevKey = song.originalKey?.trim();
-    final newKey = _keyCtrl.text.trim().isEmpty ? null : _keyCtrl.text.trim();
-    if (prevKey != newKey) {
-      widget.onOriginalKeyChanged?.call();
-    }
-    final updatedNote = Note(
-      id: note.id,
-      title: note.title,
-      createdAt: note.createdAt,
-      updatedAt: DateTime.now(),
-      songs: [
-        for (final s in note.songs) if (s.id == song.id) updatedSong else s
-      ],
-    );
-    ref.read(notesProvider.notifier).upsert(updatedNote);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final note = widget.note;
-    final song = widget.song;
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.9,
-      builder: (_, controller) {
-        return Scaffold(
-          resizeToAvoidBottomInset: true,
-          appBar: AppBar(
-            title: const Text('Editar canción'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  _save(note, song, _blocks, _titleCtrl.text);
-                  Navigator.pop(context);
-                },
-                child: const Text('Guardar'),
-              ),
-            ],
-          ),
-          body: ListView(
-            controller: controller,
-            padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.of(context).viewInsets.bottom + 24),
-              children: [
-                TextField(
-                  controller: _titleCtrl,
-                  decoration: const InputDecoration(labelText: 'Título de la canción'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _keyCtrl,
-                  decoration: const InputDecoration(labelText: 'Tono (ej. D, Bb, F#)'),
-                ),
-                const SizedBox(height: 8),
-                ReorderableListView.builder(
-                  shrinkWrap: true,
-                  buildDefaultDragHandles: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _blocks.length,
-                  onReorder: (oldIndex, newIndex) {
-                    if (newIndex > oldIndex) newIndex--;
-                    final item = _blocks.removeAt(oldIndex);
-                    _blocks.insert(newIndex, item);
-                    setState(() {});
-                  },
-                  itemBuilder: (context, index) {
-                    final b = _blocks[index];
-                    return Card(
-                      key: ValueKey(b.id),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Row(
-                              children: [
-                                DropdownButton<BlockType>(
-                                  value: b.type,
-                                  items: const [
-                                    DropdownMenuItem(value: BlockType.text, child: Text('Etiqueta')),
-                                    DropdownMenuItem(value: BlockType.chords, child: Text('Acordes')),
-                                    DropdownMenuItem(value: BlockType.note, child: Text('Nota')),
-                                  ],
-                                  onChanged: (t) {
-                                    if (t != null) {
-                                      _blocks[index] = Block(id: b.id, type: t, content: b.content);
-                                      setState(() {});
-                                    }
-                                  },
-                                ),
-                                const Spacer(),
-                                IconButton(
-                                  onPressed: () {
-                                    _blocks.removeAt(index);
-                                    setState(() {});
-                                  },
-                                  icon: const Icon(Icons.delete),
-                                ),
-                                IconButton(
-                                  onPressed: () {
-                                    _blocks.insert(index + 1, Block(id: HiveService.newId(), type: b.type, content: b.content));
-                                    setState(() {});
-                                  },
-                                  icon: const Icon(Icons.copy),
-                                ),
-                              ],
-                            ),
-                            TextField(
-                              controller: TextEditingController(text: b.content),
-                              maxLines: b.type == BlockType.chords ? null : 3,
-                              decoration: InputDecoration(
-                                labelText: b.type == BlockType.chords ? 'Acordes (por espacios)' : (b.type == BlockType.text ? 'Etiqueta' : 'Nota'),
-                              ),
-                              onChanged: (v) {
-                                _blocks[index] = Block(id: b.id, type: b.type, content: v);
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        _blocks.add(Block(id: HiveService.newId(), type: BlockType.text, content: 'INTRO'));
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.label),
-                      label: const Text('Agregar etiqueta'),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        _blocks.add(Block(id: HiveService.newId(), type: BlockType.chords, content: ''));
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.music_note),
-                      label: const Text('Agregar acordes'),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        _blocks.add(Block(id: HiveService.newId(), type: BlockType.note, content: ''));
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.note_alt),
-                      label: const Text('Agregar nota'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-        );
-      },
-    );
-  }
-}
+// _SongEditorSheet removed — replaced by SongTextEditor widget
 
 
 class _LibraryPickerSheet extends ConsumerWidget {
@@ -917,7 +743,7 @@ class _EmptyNotePlaceholder extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.library_music, size: 64, color: Theme.of(context).colorScheme.primary.withOpacity(0.8)),
+            Icon(Icons.library_music, size: 64, color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.8)),
             const SizedBox(height: 12),
             Text(
               'Tu nota está vacía',

@@ -1,9 +1,12 @@
-/// Parser y tokenizador de líneas de acordes.
-/// Reglas claves:
-/// - Separar tokens por espacios únicamente. No separar por '-'.
-/// - Detectar tokens de acorde: comienzan con [A-G], opcional accidental (#, b, ♯, ♭),
-///   pueden incluir sufijos (m, maj7, sus4, add9, dim, aug, b5, #11, etc.) y slash con bajo.
-/// - Cualquier token que no cumpla el patrón se marca como texto.
+// Parser y tokenizador de líneas de acordes.
+//
+// Reglas claves:
+// - Separar tokens por espacios.
+// - Detectar tokens de acorde usando regex estricta: raíz + accidental +
+//   sufijos válidos + bajo slash opcional.
+// - Cualquier token que no cumpla el patrón exacto se marca como texto.
+// - Paréntesis exteriores se tratan como decoradores: (Am) -> acorde Am.
+// - Tokens con '-' se tratan como sub-acordes: Am-G -> dos acordes unidos.
 
 class LineToken {
   LineToken({required this.raw, required this.isChord});
@@ -11,45 +14,127 @@ class LineToken {
   final bool isChord;
 }
 
-final RegExp _rootRegex = RegExp(r'^[A-G](?:#|b|♯|♭)?');
-final RegExp _bassRegex = RegExp(r'/(?:[A-G](?:#|b|♯|♭)?)');
+/// Regex estricta para validar un acorde individual (sin paréntesis ni dash).
+/// Matchea: C, Am, F#m7, Bbmaj7, Dsus4, E/G#, A7b5, C#dim, Gadd9, etc.
+/// NO matchea: Amor, Dios, ESTROFA, CORO, Gloria, x2, etc.
+/// Chord suffix regex: matches valid suffixes after the root note.
+/// Strategy: allow known musical tokens (m, maj, dim, sus, add, numbers,
+/// accidentals in combination) but reject random letters (like 'mor', 'ios').
+final RegExp _chordRegex = RegExp(
+  r'^[A-G](?:#|b|♯|♭)?'                   // Raíz: A-G + accidental
+  r'(?:'                                    // Inicio grupo sufijo opcional
+    r'm(?:aj|in)?|'                          // m, maj, min
+    r'M|aug|dim|\+|°|ø'                    // Calidad
+  r')?'
+  r'(?:2|4|5|6|7|9|11|13)?'                // Extensión
+  r'(?:sus[24]?)?'                          // Suspendidas
+  r'(?:add(?:2|4|9|11|13))?'               // Add
+  r'(?:'                                    // Alteraciones (0 o más)
+    r'(?:#|b|♯|♭)(?:5|7|9|11|13)|'         // #5, b9, etc.
+    r'(?:5|7|9|11|13)(?:#|b|♯|♭)'          // 5b, 7#, etc. (alternate order)
+  r')*'
+  r'(?:\/[A-G](?:#|b|♯|♭)?)?'             // Bajo slash (/G#)
+  r'$',
+);
 
-bool _looksLikeChordToken(String token) {
-  if (token.isEmpty) return false;
-  
-  // Verificar si es un acorde entre paréntesis
-  if (token.startsWith('(') && token.endsWith(')')) {
-    final innerToken = token.substring(1, token.length - 1);
-    return _looksLikeChordToken(innerToken);
+bool _hasBalancedParens(String token) {
+  var depth = 0;
+  for (final rune in token.runes) {
+    final ch = String.fromCharCode(rune);
+    if (ch == '(') {
+      depth++;
+    } else if (ch == ')') {
+      depth--;
+      if (depth < 0) return false;
+    }
   }
-  
-  // Verificar si contiene paréntesis en el medio o al final (ej: A(C), (C)-A)
-  if (token.contains('(') && token.contains(')')) {
-    // Dividir por paréntesis y verificar que cada parte sea un acorde válido
-    final parts = token.split(RegExp(r'[()]'));
+  return depth == 0;
+}
+
+bool _isWrappedInBalancedParens(String token) {
+  if (token.length < 2) return false;
+  if (!token.startsWith('(') || !token.endsWith(')')) return false;
+
+  var depth = 0;
+  for (var i = 0; i < token.length; i++) {
+    final ch = token[i];
+    if (ch == '(') {
+      depth++;
+    } else if (ch == ')') {
+      depth--;
+      if (depth < 0) return false;
+      // Si cierra antes del final, no envuelve todo el token.
+      if (depth == 0 && i < token.length - 1) return false;
+    }
+  }
+  return depth == 0;
+}
+
+/// Verifica si un token individual (sin paréntesis ni dash) es un acorde.
+bool _isSingleChord(String token) {
+  if (token.isEmpty) return false;
+  return _chordRegex.hasMatch(token);
+}
+
+/// Verifica si un token completo (puede incluir paréntesis y dash) es un acorde.
+bool _looksLikeChordToken(String token) {
+  final trimmed = token.trim();
+  if (trimmed.isEmpty) return false;
+
+  // Strip paréntesis exteriores: (Am) -> Am, ((Am)) -> (Am) -> Am
+  String inner = trimmed;
+  while (_isWrappedInBalancedParens(inner) && inner.length > 2) {
+    inner = inner.substring(1, inner.length - 1).trim();
+  }
+
+  if (inner.isEmpty) return false;
+
+  // Si contiene '-', verificar que cada parte sea un acorde o vacía
+  // Ejemplos: Am-G, F#5b-F, (A/E-D) -> después de strip: A/E-D
+  if (inner.contains('-')) {
+    final parts = inner.split('-');
+    int chordParts = 0;
     for (final part in parts) {
-      if (part.isNotEmpty && !_looksLikeChordToken(part)) {
+      final p = part.trim();
+      if (p.isEmpty) continue;
+      if (_looksLikeChordToken(p)) {
+        chordParts++;
+      } else {
         return false;
       }
     }
-    return true;
+    return chordParts > 0;
   }
-  
-  // Debe iniciar con nota
-  if (!_rootRegex.hasMatch(token)) return false;
-  // Permitir sufijos comunes y otros caracteres dentro del token, incluido '-'
-  // Si contiene espacios, no es un único token (ya lo habríamos splitteado).
-  if (token.contains(' ')) return false;
-  return true;
+
+  // Soporta acordes con grupos parentéticos internos, p.ej. A(C)
+  if (inner.contains('(') || inner.contains(')')) {
+    if (!_hasBalancedParens(inner)) return false;
+
+    final groupPattern = RegExp(r'\(([^()]*)\)');
+    final groups = groupPattern.allMatches(inner).toList();
+    if (groups.isEmpty) return false;
+
+    for (final group in groups) {
+      final groupContent = group.group(1)!.trim();
+      if (groupContent.isEmpty || !_looksLikeChordToken(groupContent)) {
+        return false;
+      }
+    }
+
+    final outside = inner.replaceAll(groupPattern, '').trim();
+    if (outside.isEmpty) return true;
+    return _looksLikeChordToken(outside);
+  }
+
+  // Verificar como acorde simple
+  return _isSingleChord(inner);
 }
 
 List<LineToken> parseLineToTokens(String line) {
-  // split por cualquier cantidad de espacios, conservando tokens no vacíos
+  // Split por whitespace (fix: un solo backslash para regex)
   final parts = line.trimRight().split(RegExp(r'\s+'));
   return parts
       .where((p) => p.isNotEmpty)
       .map((p) => LineToken(raw: p, isChord: _looksLikeChordToken(p)))
       .toList();
 }
-
-

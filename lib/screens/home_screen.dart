@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/app_providers.dart';
 import '../models/note.dart';
 import '../services/storage/hive_service.dart';
-import '../services/chords/transpose.dart';
+import '../utils/title_utils.dart';
 import 'note_editor_screen.dart';
 import 'library_screen.dart';
 import 'help_screen.dart';
@@ -68,6 +68,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             )
           else ...[
             IconButton(
+              tooltip: 'Ayuda',
+              icon: const Icon(Icons.help_outline),
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpScreen()));
+              },
+            ),
+            IconButton(
               tooltip: 'Biblioteca',
               icon: const Icon(Icons.library_music),
               onPressed: () {
@@ -125,7 +132,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     itemCount: sorted.length,
                 itemBuilder: (context, index) {
                   final note = sorted[index];
-                  final titles = note.songs.map((s) => _displayTitleWithKey(s.title, s.originalKey, 0)).toList();
+                  final titles = note.songs.map((s) => displayTitleWithKey(s.title, s.originalKey, 0)).toList();
                   final selected = selectedSet.contains(note.id);
                   return GestureDetector(
                     onLongPress: () {
@@ -200,7 +207,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               itemBuilder: (context, index) {
                 final note = sorted[index];
                 final expanded = ref.watch(_expandedNotesProvider).contains(note.id);
-                final songTitles = note.songs.map((s) => _displayTitleWithKey(s.title, s.originalKey, 0)).toList();
+                final songTitles = note.songs.map((s) => displayTitleWithKey(s.title, s.originalKey, 0)).toList();
                 final selected = selectedSet.contains(note.id);
                 return GestureDetector(
                   onLongPress: () {
@@ -325,45 +332,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           : null,
       floatingActionButton: selecting
           ? null
-          : Stack(
-              alignment: Alignment.bottomCenter,
-              children: [
-                Positioned(
-                  left: 24,
-                  bottom: 16,
-                  child: FloatingActionButton(
-                    heroTag: 'help-fab',
-                    onPressed: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpScreen()));
-                    },
-                    child: const Icon(Icons.help_outline),
+          : FloatingActionButton(
+              onPressed: () {
+                final id = HiveService.newId();
+                final note = Note(
+                  id: id,
+                  title: 'Nota ${notes.length + 1}',
+                  createdAt: DateTime.now(),
+                  updatedAt: DateTime.now(),
+                );
+                ref.read(notesProvider.notifier).upsert(note);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => NoteEditorScreen(noteId: id),
                   ),
-                ),
-                Positioned(
-                  right: 16,
-                  bottom: 16,
-                  child: FloatingActionButton(
-                    heroTag: 'add-fab',
-                    onPressed: () {
-                      final id = HiveService.newId();
-                      final note = Note(
-                        id: id,
-                        title: 'Nota ${notes.length + 1}',
-                        createdAt: DateTime.now(),
-                        updatedAt: DateTime.now(),
-                      );
-                      ref.read(notesProvider.notifier).upsert(note);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => NoteEditorScreen(noteId: id),
-                        ),
-                      );
-                    },
-                    child: const Icon(Icons.add),
-                  ),
-                ),
-              ],
+                );
+              },
+              child: const Icon(Icons.add),
             ),
     );
   }
@@ -375,19 +361,6 @@ final _expandedNotesProvider = StateProvider<Set<String>>((ref) => <String>{});
 final _homeSelectingProvider = StateProvider<bool>((ref) => false);
 final _homeSelectedSetProvider = StateProvider<Set<String>>((ref) => <String>{});
 
-String _displayTitleWithKey(String title, String? originalKey, int semitones, {bool preferSharps = true}) {
-  // Si no hay tono definido, intenta detectar uno entre paréntesis ya existente.
-  String baseTitle = title;
-  String? key = originalKey;
-  final match = RegExp(r"^(.*)\(([^)]+)\)\s*$").firstMatch(title);
-  if (match != null) {
-    baseTitle = match.group(1)!.trim();
-    key ??= match.group(2)!.trim();
-  }
-  if (key == null || key.isEmpty) return baseTitle;
-  final transposed = transposeKey(key, semitones, preferSharps: preferSharps);
-  return baseTitle.isEmpty ? transposed : baseTitle + ' (' + transposed + ')';
-}
 
 class _NoteMenu extends ConsumerWidget {
   const _NoteMenu({required this.note});

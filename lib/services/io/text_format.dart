@@ -1,5 +1,6 @@
 import '../../models/song.dart';
 import '../../models/block.dart';
+import '../chords/parser.dart';
 
 class TextFormat {
   // Exporta una canción a texto plano
@@ -12,6 +13,8 @@ class TextFormat {
     for (final b in song.blocks) {
       if (b.type == BlockType.text) {
         buffer.writeln(b.content.toUpperCase());
+      } else if (b.type == BlockType.note) {
+        buffer.writeln('// ${b.content}');
       } else {
         buffer.writeln(b.content);
       }
@@ -22,6 +25,28 @@ class TextFormat {
 
   // Exporta una lista de canciones separadas por ---
   static String exportSongs(List<Song> songs) => songs.map(exportSong).join('\n\n---\n\n');
+
+  /// Convierte bloques de vuelta a texto editable (para el editor unificado).
+  /// Es la operación inversa de _parseSingleSong.
+  static String blocksToText(List<Block> blocks) {
+    final buffer = StringBuffer();
+    for (int i = 0; i < blocks.length; i++) {
+      final b = blocks[i];
+      switch (b.type) {
+        case BlockType.text:
+          buffer.writeln(b.content.toUpperCase());
+        case BlockType.chords:
+          buffer.writeln(b.content);
+        case BlockType.note:
+          buffer.writeln('// ${b.content}');
+      }
+      // Agregar línea en blanco entre bloques (excepto al final)
+      if (i < blocks.length - 1) {
+        buffer.writeln();
+      }
+    }
+    return buffer.toString().trimRight();
+  }
 
   // Parseo de texto -> lista de canciones (una o varias)
   static List<Song> parseSongs(String text, {String Function()? idGen}) {
@@ -54,6 +79,12 @@ class TextFormat {
     return chunks.map((c) => c.join('\n')).toList();
   }
 
+  /// Parsea un bloque de texto de una sola canción a un objeto Song.
+  /// Público para que el editor unificado pueda usarlo directamente.
+  static Song? parseSingleSong(String chunk, String newId) {
+    return _parseSingleSong(chunk, newId);
+  }
+
   static Song? _parseSingleSong(String chunk, String newId) {
     if (chunk.trim().isEmpty) return null;
     final lines = chunk.split('\n');
@@ -82,15 +113,17 @@ class TextFormat {
         blocks.add(Block(id: newId + '-b' + blocks.length.toString(), type: BlockType.text, content: line.trim().toUpperCase()));
         continue;
       }
-      if (_looksLikeChordLine(line)) {
-        currentChords ??= StringBuffer();
-        currentChords.writeln(line.trimRight());
-      } else if (_isNoteLine(line)) {
+      if (_isNoteLine(line)) {
         if (currentChords != null) {
           blocks.add(Block(id: newId + '-b' + blocks.length.toString(), type: BlockType.chords, content: currentChords.toString().trimRight()));
           currentChords = null;
         }
         blocks.add(Block(id: newId + '-b' + blocks.length.toString(), type: BlockType.note, content: line.replaceFirst(RegExp(r'^(NOTE:|//)\s*'), '').trim()));
+        continue;
+      }
+      if (_looksLikeChordLine(line)) {
+        currentChords ??= StringBuffer();
+        currentChords.writeln(line.trimRight());
       } else {
         if (currentChords != null) {
           blocks.add(Block(id: newId + '-b' + blocks.length.toString(), type: BlockType.chords, content: currentChords.toString().trimRight()));
@@ -119,23 +152,24 @@ class TextFormat {
     final l = line.trim();
     if (l.isEmpty) return false;
     final isUpper = l == l.toUpperCase();
-    return isUpper && RegExp(r'^(INTRO|ESTROFA|CORO|PUENTE|INTERLUDIO)(?:\b|\s|\().*').hasMatch(l);
+    return isUpper && RegExp(
+      r'^(INTRO|ESTROFA|CORO|PUENTE|INTERLUDIO|PRE-CORO|PRECORO|OUTRO|FINAL|VERSO|BRIDGE|CHORUS|PRE-CHORUS|INTERLUDE|SOLO|INSTRUMENTAL|ENDING|TAG|VAMP)(?:\b|\s|\(|$).*'
+    ).hasMatch(l);
   }
 
+  /// Usa el parser robusto para determinar si una línea es de acordes.
   static bool _looksLikeChordLine(String line) {
-    final tokens = line.trim().split(RegExp(r'\s+'));
+    final tokens = parseLineToTokens(line.trim());
     if (tokens.isEmpty) return false;
-    int chordish = 0;
+    int chordCount = 0;
     for (final t in tokens) {
-      if (RegExp(r'^[A-G](?:#|b|♯|♭)?').hasMatch(t)) chordish++;
+      if (t.isChord) chordCount++;
     }
-    return chordish >= (tokens.length / 2);
+    return chordCount >= (tokens.length / 2);
   }
 
   static bool _isNoteLine(String line) {
     final l = line.trimLeft();
-    return l.startsWith('NOTE:') || l.startsWith('//') || RegExp(r'^\(.*\)$').hasMatch(l);
+    return l.startsWith('NOTE:') || l.startsWith('//');
   }
 }
-
-

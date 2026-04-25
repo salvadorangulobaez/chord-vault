@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 
@@ -11,7 +14,14 @@ class HiveService {
   static const String settingsBoxName = 'settings_box';
 
   static Future<void> init() async {
-    await Hive.initFlutter();
+    try {
+      await Hive.initFlutter();
+    } on MissingPluginException {
+      // En tests de VM, path_provider puede no estar disponible.
+      final dir = await Directory.systemTemp.createTemp('cancionero_hive_');
+      Hive.init(dir.path);
+    }
+
     // Registrar adapters
     if (!Hive.isAdapterRegistered(10)) {
       Hive.registerAdapter(BlockAdapter());
@@ -23,13 +33,17 @@ class HiveService {
     if (!Hive.isAdapterRegistered(12)) {
       Hive.registerAdapter(NoteAdapter());
     }
-    await Future.wait([
-      Hive.openBox<Note>(notesBoxName),
-      Hive.openBox<Song>(libraryBoxName),
-      Hive.openBox(settingsBoxName),
-    ]);
+
+    final opens = <Future<dynamic>>[
+      if (!Hive.isBoxOpen(notesBoxName)) Hive.openBox<Note>(notesBoxName),
+      if (!Hive.isBoxOpen(libraryBoxName)) Hive.openBox<Song>(libraryBoxName),
+      if (!Hive.isBoxOpen(settingsBoxName)) Hive.openBox(settingsBoxName),
+    ];
+    if (opens.isNotEmpty) {
+      await Future.wait(opens);
+    }
+
     // Cargar preferencias iniciales si existen
-    final box = Hive.box(settingsBoxName);
     // gridView persisted can be read by UI via settingsProvider initialization if desired
   }
 
