@@ -1,14 +1,16 @@
+// ignore_for_file: unawaited_futures
+import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../providers/app_providers.dart';
-import '../services/io/text_format.dart';
 import '../services/io/library_file.dart';
+import '../services/io/share_export_service.dart';
+import '../services/io/text_format.dart';
 import 'song_preview_screen.dart';
 import 'widgets/song_text_editor.dart';
 import 'widgets/insert_to_note_dialog.dart';
@@ -16,17 +18,21 @@ import 'widgets/insert_to_note_dialog.dart';
 Future<void> _importFromFile(BuildContext context, WidgetRef ref) async {
   try {
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
+      type: FileType.custom,
+      allowedExtensions: const ['chordvault'],
     );
     if (result == null || result.files.isEmpty) return;
 
     final path = result.files.single.path;
     if (path == null) return;
 
+    bool dialogOpen = false;
     if (context.mounted) {
+      dialogOpen = true;
       showDialog(
         context: context,
         barrierDismissible: false,
+        useRootNavigator: true,
         builder: (_) => const Center(child: CircularProgressIndicator()),
       );
     }
@@ -43,8 +49,9 @@ Future<void> _importFromFile(BuildContext context, WidgetRef ref) async {
         ref.read(libraryProvider.notifier).upsert(song);
       }
       
-      if (context.mounted) {
-        Navigator.pop(context); // close dialog
+      if (context.mounted && dialogOpen) {
+        if (Navigator.canPop(context)) Navigator.pop(context);
+        dialogOpen = false;
         final duplicates = toImport.length - nonDuplicates.length;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -56,8 +63,9 @@ Future<void> _importFromFile(BuildContext context, WidgetRef ref) async {
         );
       }
     } catch (e) {
-      if (context.mounted) {
-        Navigator.pop(context); // close dialog
+      if (context.mounted && dialogOpen) {
+        if (Navigator.canPop(context)) Navigator.pop(context);
+        dialogOpen = false;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error al importar archivo: $e')),
         );
@@ -72,19 +80,56 @@ Future<void> _importFromFile(BuildContext context, WidgetRef ref) async {
   }
 }
 
-class LibraryScreen extends ConsumerWidget {
+class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LibraryScreen> createState() => _LibraryScreenState();
+}
+
+class _LibraryScreenState extends ConsumerState<LibraryScreen> {
+  Timer? _debounce;
+  late final TextEditingController _searchCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl = TextEditingController(text: ref.read(_libSearchProvider));
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String v) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) ref.read(_libSearchProvider.notifier).state = v;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final library = ref.watch(libraryProvider);
     final search = ref.watch(_libSearchProvider);
     final sort = ref.watch(_libSortProvider);
     final selecting = ref.watch(_libSelectingProvider);
     final selectedSet = ref.watch(_libSelectedSetProvider);
 
-    // Filtrar y ordenar
-    var filtered = library.where((s) => s.title.toLowerCase().contains(search.toLowerCase())).toList();
+    // Filtrar y ordenar (título, autor, tags, contenido bloques)
+    final qLower = search.toLowerCase();
+    var filtered = search.isEmpty
+        ? library.toList()
+        : library.where((s) {
+            if (s.title.toLowerCase().contains(qLower)) return true;
+            if ((s.author ?? '').toLowerCase().contains(qLower)) return true;
+            if (s.tags.any((t) => t.toLowerCase().contains(qLower))) return true;
+            if (s.blocks.any((b) => b.content.toLowerCase().contains(qLower))) return true;
+            return false;
+          }).toList();
     switch (sort) {
       case LibrarySort.alphaAsc:
         filtered.sort((a, b) => a.title.compareTo(b.title));
@@ -163,12 +208,24 @@ class LibraryScreen extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
-              decoration: const InputDecoration(
+              controller: _searchCtrl,
+              decoration: InputDecoration(
                 hintText: 'Buscar canciones...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: search.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          _debounce?.cancel();
+                          ref.read(_libSearchProvider.notifier).state = '';
+                        },
+                      )
+                    : null,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              onChanged: (v) => ref.read(_libSearchProvider.notifier).state = v,
+              onChanged: _onSearchChanged,
+              onTapOutside: (_) => FocusScope.of(context).unfocus(),
             ),
           ),
           // Lista de canciones
@@ -185,14 +242,14 @@ class LibraryScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 24),
                         Text(
-                          'No hay canciones',
+                          search.isNotEmpty ? 'No hay resultados' : 'No hay canciones',
                           style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Añade o importa tu primera canción',
+                          search.isNotEmpty ? 'Prueba con otra búsqueda' : 'Añade o importa tu primera canción',
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
@@ -212,6 +269,7 @@ class LibraryScreen extends ConsumerWidget {
                   onLongPress: selecting
                       ? null
                       : () {
+                          HapticFeedback.lightImpact();
                           ref.read(_libSelectingProvider.notifier).state = true;
                           final set = {...ref.read(_libSelectedSetProvider)};
                           set.add(s.id);
@@ -281,7 +339,19 @@ class LibraryScreen extends ConsumerWidget {
                                     ),
                                   );
                                   if (confirm == true) {
+                                    final deleted = s;
                                     ref.read(libraryProvider.notifier).delete(s.id);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('"${deleted.title}" eliminada'),
+                                          action: SnackBarAction(
+                                            label: 'Deshacer',
+                                            onPressed: () => ref.read(libraryProvider.notifier).upsert(deleted),
+                                          ),
+                                        ),
+                                      );
+                                    }
                                   }
                               }
                             },
@@ -352,11 +422,27 @@ class LibraryScreen extends ConsumerWidget {
                               ),
                             );
                             if (confirm == true) {
+                              final deletedSongs = library.where((s) => selectedSet.contains(s.id)).toList();
                               for (final songId in selectedSet) {
                                 ref.read(libraryProvider.notifier).delete(songId);
                               }
                               ref.read(_libSelectingProvider.notifier).state = false;
                               ref.read(_libSelectedSetProvider.notifier).state = <String>{};
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('${deletedSongs.length} canción(es) eliminada(s)'),
+                                    action: SnackBarAction(
+                                      label: 'Deshacer',
+                                      onPressed: () {
+                                        for (final ds in deletedSongs) {
+                                          ref.read(libraryProvider.notifier).upsert(ds);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                );
+                              }
                             }
                           },
                     icon: const Icon(Icons.delete),
@@ -368,50 +454,30 @@ class LibraryScreen extends ConsumerWidget {
                     tooltip: 'Compartir / Exportar',
                     onSelected: (val) async {
                       final toExport = library.where((s) => selectedSet.contains(s.id)).toList();
-                      if (val == 'text') {
-                        final text = TextFormat.exportSongs(toExport);
-                        await Clipboard.setData(ClipboardData(text: text));
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('${toExport.length} canción(es) copiadas al portapapeles')),
-                          );
-                        }
-                      } else if (val == 'share_text') {
-                        final text = TextFormat.shareSongsAsText(toExport);
-                        await Share.share(text);
-                        ref.read(_libSelectingProvider.notifier).state = false;
-                        ref.read(_libSelectedSetProvider.notifier).state = <String>{};
-                      } else if (val == 'file') {
-                        try {
-                          final jsonStr = LibraryFile.exportToJson(toExport);
-                          final dir = await getTemporaryDirectory();
-                          final file = File('${dir.path}/exportacion_cancionero.chordvault');
-                          await file.writeAsString(jsonStr);
-                          
+                      try {
+                        if (val == 'text') {
+                          await ShareExportService.copySongsAsText(toExport);
                           if (context.mounted) {
-                            final box = context.findRenderObject() as RenderBox?;
-                            if (box != null) {
-                              await Share.shareXFiles(
-                                [XFile(file.path)],
-                                text: 'Exportación de ChordVault (${toExport.length} canciones)',
-                                sharePositionOrigin: box.localToGlobal(Offset.zero) & box.size,
-                              );
-                            } else {
-                              await Share.shareXFiles(
-                                [XFile(file.path)],
-                                text: 'Exportación de ChordVault (${toExport.length} canciones)',
-                              );
-                            }
-                            
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('${toExport.length} canción(es) copiadas al portapapeles')),
+                            );
+                          }
+                        } else if (val == 'share_text') {
+                          await ShareExportService.shareSongsAsText(toExport);
+                          ref.read(_libSelectingProvider.notifier).state = false;
+                          ref.read(_libSelectedSetProvider.notifier).state = <String>{};
+                        } else if (val == 'file') {
+                          if (context.mounted) {
+                            await ShareExportService.exportAndShareSongs(toExport, context);
                             ref.read(_libSelectingProvider.notifier).state = false;
                             ref.read(_libSelectedSetProvider.notifier).state = <String>{};
                           }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error al exportar: $e')),
-                            );
-                          }
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error al exportar: $e')),
+                          );
                         }
                       }
                     },
@@ -553,20 +619,12 @@ class _ImportSongsSheetState extends ConsumerState<_ImportSongsSheet> {
                                       int added = 0;
                                       int skipped = 0;
 
-                                      for (final newSong in songs) {
-                                        final newSongText = TextFormat.exportSong(newSong);
-                                        final isDuplicate = existingSongs.any((s) {
-                                          if (s.title != newSong.title || s.originalKey != newSong.originalKey) return false;
-                                          return TextFormat.exportSong(s) == newSongText;
-                                        });
-
-                                        if (isDuplicate) {
-                                          skipped++;
-                                        } else {
-                                          ref.read(libraryProvider.notifier).upsert(newSong);
-                                          added++;
-                                        }
+                                      final nonDuplicates = LibraryFile.filterDuplicates(songs, existingSongs);
+                                      skipped = songs.length - nonDuplicates.length;
+                                      for (final s in nonDuplicates) {
+                                        ref.read(libraryProvider.notifier).upsert(s);
                                       }
+                                      added = nonDuplicates.length;
 
                                       if (mounted) {
                                         Navigator.pop(context);

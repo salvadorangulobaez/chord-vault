@@ -18,6 +18,9 @@ class Note {
   List<Song> songs;
 }
 
+/// NoteAdapter versionado — typeId 12, 5 campos (0..4).
+/// typeId check en HiveService asegura no colisión. Nuevos campos
+/// deben usar índice libre y defaults en read().
 class NoteAdapter extends TypeAdapter<Note> {
   @override
   final int typeId = 12;

@@ -375,15 +375,20 @@ class _SongTextEditorState extends State<SongTextEditor> {
                   decoration: BoxDecoration(
                     color: Theme.of(context)
                         .colorScheme
-                        .surfaceContainerHighest
-                        .withValues(alpha: 0.35),
+                        .primaryContainer
+                        .withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+                    ),
                   ),
                   child: Text(
                     block.content,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'monospace',
                       fontSize: 13,
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 )

@@ -4,13 +4,22 @@ import '../../models/note.dart';
 import '../chords/parser.dart';
 
 class TextFormat {
-  // Exporta una canción a texto plano
+  // Exporta una canción a texto plano (incluye metadata para roundtrip)
   static String exportSong(Song song) {
     final buffer = StringBuffer();
     final title = song.originalKey == null || song.originalKey!.isEmpty
         ? song.title
         : song.title.split(RegExp(r"\s*\(.*\)\s*$")).first.trim() + ' (' + song.originalKey! + ')';
     buffer.writeln(title);
+    if (song.author != null && song.author!.isNotEmpty) {
+      buffer.writeln('// AUTHOR: ${song.author}');
+    }
+    if (song.tags.isNotEmpty) {
+      buffer.writeln('// TAGS: ${song.tags.join(', ')}');
+    }
+    if (song.isFavorite) {
+      buffer.writeln('// FAVORITE: true');
+    }
     for (int i = 0; i < song.blocks.length; i++) {
       final b = song.blocks[i];
       if (b.type == BlockType.text) {
@@ -27,8 +36,8 @@ class TextFormat {
   // Exporta una lista de canciones separadas por ---
   static String exportSongs(List<Song> songs) => songs.map(exportSong).join('\n\n---\n\n');
 
-  // Exporta una lista de canciones compactas para compartir en lenguaje natural
-  static String shareSongsAsText(List<Song> songs) => songs.map(exportSong).join('\n');
+  // Exporta una lista de canciones compactas para compartir (re-parseable: usa ---)
+  static String shareSongsAsText(List<Song> songs) => exportSongs(songs);
 
   // Exporta una nota completa a texto
   static String exportNote(Note note, {bool forSharing = false}) {
@@ -81,7 +90,9 @@ class TextFormat {
     int blankCount = 0;
     for (final raw in lines) {
       final line = raw.trimRight();
-      if (line.trim() == '---' || blankCount >= 2) {
+      // Solo '---' es separador explícito confiable. Doble blank solo si >=3 o es sección,
+      // para no cortar canciones con doble línea interna.
+      if (line.trim() == '---' || blankCount >= 3) {
         if (current.isNotEmpty) chunks.add(current);
         current = [];
         blankCount = 0;
@@ -113,10 +124,29 @@ class TextFormat {
     String title = t.$1;
     String? key = t.$2;
 
+    String? author;
+    List<String> tags = [];
+    bool isFavorite = false;
     final List<Block> blocks = [];
     StringBuffer? currentChords;
     for (int i = 1; i < lines.length; i++) {
       final line = lines[i];
+      final lTrimLeft = line.trimLeft();
+      if (lTrimLeft.startsWith('// AUTHOR:')) {
+        author = lTrimLeft.substring('// AUTHOR:'.length).trim();
+        if (author.isEmpty) author = null;
+        continue;
+      }
+      if (lTrimLeft.startsWith('// TAGS:')) {
+        final raw = lTrimLeft.substring('// TAGS:'.length).trim();
+        tags = raw.isEmpty ? [] : raw.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+        continue;
+      }
+      if (lTrimLeft.startsWith('// FAVORITE:')) {
+        final raw = lTrimLeft.substring('// FAVORITE:'.length).trim().toLowerCase();
+        isFavorite = raw == 'true' || raw == '1' || raw == 'yes';
+        continue;
+      }
       if (line.trim().isEmpty) {
         if (currentChords != null) {
           blocks.add(Block(id: newId + '-b' + blocks.length.toString(), type: BlockType.chords, content: currentChords.toString().trimRight()));
@@ -155,7 +185,7 @@ class TextFormat {
       blocks.add(Block(id: newId + '-b' + blocks.length.toString(), type: BlockType.chords, content: currentChords.toString().trimRight()));
     }
 
-    return Song(id: newId, title: title, blocks: blocks, originalKey: key);
+    return Song(id: newId, title: title, blocks: blocks, originalKey: key, author: author, tags: tags, isFavorite: isFavorite);
   }
 
   // Returns (title, key?)

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/note.dart';
 import '../models/song.dart';
@@ -30,6 +31,7 @@ class SettingsController extends StateNotifier<SettingsState> {
   }
 
   void _load() {
+    if (!Hive.isBoxOpen(HiveService.settingsBoxName)) return;
     final box = HiveService.settingsBox;
     final preferSharps = box.get('preferSharps', defaultValue: true) as bool;
     final fontScale = box.get('fontScale', defaultValue: 1.0) as double;
@@ -46,6 +48,11 @@ class SettingsController extends StateNotifier<SettingsState> {
 
   void updateSettings(SettingsState newSettings) {
     state = newSettings;
+    _save();
+  }
+
+  void setGridView(bool v) {
+    state = state.copyWith(gridView: v);
     _save();
   }
 
@@ -68,6 +75,7 @@ class NotesController extends StateNotifier<List<Note>> {
   }
 
   void _load() {
+    if (!Hive.isBoxOpen(HiveService.notesBoxName)) return;
     final box = HiveService.notesBox;
     state = box.values.toList();
   }
@@ -100,6 +108,7 @@ class LibraryController extends StateNotifier<List<Song>> {
   }
 
   void _load() {
+    if (!Hive.isBoxOpen(HiveService.libraryBoxName)) return;
     final box = HiveService.libraryBox;
     state = box.values.toList();
   }

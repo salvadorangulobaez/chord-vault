@@ -1,17 +1,19 @@
+// ignore_for_file: unawaited_futures
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'dart:io';
-import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../providers/app_providers.dart';
 import '../models/note.dart';
+import '../models/song.dart';
+import '../models/block.dart';
 import '../services/storage/hive_service.dart';
-import '../services/io/text_format.dart';
 import '../services/io/note_file.dart';
+import '../services/io/share_export_service.dart';
 import '../utils/title_utils.dart';
 import 'note_editor_screen.dart';
 import 'library_screen.dart';
@@ -19,16 +21,22 @@ import 'help_screen.dart';
 
 Future<void> _importNoteFromFile(BuildContext context, WidgetRef ref) async {
   try {
-    final result = await FilePicker.platform.pickFiles(type: FileType.any);
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['cvnote'],
+    );
     if (result == null || result.files.isEmpty) return;
 
     final path = result.files.single.path;
     if (path == null) return;
 
+    bool dialogOpen = false;
     if (context.mounted) {
+      dialogOpen = true;
       showDialog(
         context: context,
         barrierDismissible: false,
+        useRootNavigator: true,
         builder: (_) => const Center(child: CircularProgressIndicator()),
       );
     }
@@ -42,15 +50,17 @@ Future<void> _importNoteFromFile(BuildContext context, WidgetRef ref) async {
         ref.read(notesProvider.notifier).upsert(note);
       }
       
-      if (context.mounted) {
-        Navigator.pop(context); // close dialog
+      if (context.mounted && dialogOpen) {
+        if (Navigator.canPop(context)) Navigator.pop(context);
+        dialogOpen = false;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Importadas ${importedNotes.length} notas.')),
         );
       }
     } catch (e) {
-      if (context.mounted) {
-        Navigator.pop(context); // close dialog
+      if (context.mounted && dialogOpen) {
+        if (Navigator.canPop(context)) Navigator.pop(context);
+        dialogOpen = false;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error al importar archivo: $e')),
         );
@@ -74,10 +84,33 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  Timer? _debounce;
+  late final TextEditingController _searchCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl = TextEditingController(text: ref.read(_searchQueryProvider));
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String v) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) ref.read(_searchQueryProvider.notifier).state = v;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final notes = ref.watch(notesProvider);
-    final viewAsGrid = ref.watch(_viewModeProvider); // false=list, true=grid
+    final viewAsGrid = ref.watch(settingsProvider.select((s) => s.gridView));
     final query = ref.watch(_searchQueryProvider);
     final selecting = ref.watch(_homeSelectingProvider);
     final selectedSet = ref.watch(_homeSelectedSetProvider);
@@ -88,6 +121,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             if (n.title.toLowerCase().contains(q)) return true;
             for (final s in n.songs) {
               if (s.title.toLowerCase().contains(q)) return true;
+              if ((s.author ?? '').toLowerCase().contains(q)) return true;
+              if (s.tags.join(' ').toLowerCase().contains(q)) return true;
+              for (final b in s.blocks) {
+                if (b.content.toLowerCase().contains(q)) return true;
+              }
             }
             return false;
           }).toList();
@@ -135,7 +173,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             IconButton(
               tooltip: viewAsGrid ? 'Vista lista' : 'Vista mosaicos',
               icon: Icon(viewAsGrid ? Icons.view_list : Icons.grid_view),
-              onPressed: () => ref.read(_viewModeProvider.notifier).state = !viewAsGrid,
+              onPressed: () => ref.read(settingsProvider.notifier).setGridView(!viewAsGrid),
             ),
           ],
         ],
@@ -145,13 +183,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             child: TextField(
+              controller: _searchCtrl,
               decoration: InputDecoration(
                 hintText: 'Buscar notas y canciones...',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: query.isNotEmpty
                     ? IconButton(
+                        tooltip: 'Limpiar búsqueda',
                         icon: const Icon(Icons.clear),
-                        onPressed: () => ref.read(_searchQueryProvider.notifier).state = '',
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          _debounce?.cancel();
+                          ref.read(_searchQueryProvider.notifier).state = '';
+                        },
                       )
                     : null,
                 border: OutlineInputBorder(
@@ -159,19 +203,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
               ),
-              onChanged: (v) => ref.read(_searchQueryProvider.notifier).state = v,
+              onChanged: _onSearchChanged,
+              onTapOutside: (_) => FocusScope.of(context).unfocus(),
             ),
           ),
           Expanded(
-            child: sorted.isEmpty
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: sorted.isEmpty
                 ? Center(
+                    key: ValueKey('empty_${query.isNotEmpty}'),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          Icons.queue_music,
+                          query.isNotEmpty ? Icons.search_off : Icons.queue_music,
                           size: 80,
                           color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                          semanticLabel: query.isNotEmpty ? 'Sin resultados' : 'Sin notas',
                         ),
                         const SizedBox(height: 24),
                         Text(
@@ -207,6 +256,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   final selected = selectedSet.contains(note.id);
                   return GestureDetector(
                     onLongPress: () {
+                      HapticFeedback.lightImpact();
                       final set = {...ref.read(_homeSelectedSetProvider)};
                       set.add(note.id);
                       ref.read(_homeSelectedSetProvider.notifier).state = set;
@@ -283,6 +333,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 final selected = selectedSet.contains(note.id);
                 return GestureDetector(
                   onLongPress: () {
+                    HapticFeedback.lightImpact();
                     final set = {...ref.read(_homeSelectedSetProvider)};
                     set.add(note.id);
                     ref.read(_homeSelectedSetProvider.notifier).state = set;
@@ -375,6 +426,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 );
               },
             ),
+              ),
           ),
         ],
       ),
@@ -401,11 +453,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 ),
                               );
                               if (confirm == true) {
+                                final deletedNotes = notes.where((n) => selectedSet.contains(n.id)).toList();
                                 for (final id in selectedSet) {
                                   ref.read(notesProvider.notifier).delete(id);
                                 }
                                 ref.read(_homeSelectingProvider.notifier).state = false;
                                 ref.read(_homeSelectedSetProvider.notifier).state = <String>{};
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('${deletedNotes.length} nota(s) eliminada(s)'),
+                                      action: SnackBarAction(
+                                        label: 'Deshacer',
+                                        onPressed: () {
+                                          for (final dn in deletedNotes) {
+                                            ref.read(notesProvider.notifier).upsert(dn);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                }
                               }
                             },
                       icon: const Icon(Icons.delete),
@@ -418,50 +486,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       tooltip: 'Compartir / Exportar',
                       onSelected: (val) async {
                         final toExport = notes.where((n) => selectedSet.contains(n.id)).toList();
-                        if (val == 'text') {
-                          final text = TextFormat.exportNotes(toExport, forSharing: false);
-                          await Clipboard.setData(ClipboardData(text: text));
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('${toExport.length} nota(s) copiadas al portapapeles')),
-                            );
-                          }
-                        } else if (val == 'share_text') {
-                          final text = TextFormat.exportNotes(toExport, forSharing: true);
-                          await Share.share(text);
-                          ref.read(_homeSelectingProvider.notifier).state = false;
-                          ref.read(_homeSelectedSetProvider.notifier).state = <String>{};
-                        } else if (val == 'file') {
-                          try {
-                            final jsonStr = NoteFile.exportToJson(toExport);
-                            final dir = await getTemporaryDirectory();
-                            final file = File('${dir.path}/exportacion_notas.cvnote');
-                            await file.writeAsString(jsonStr);
-                            
+                        try {
+                          if (val == 'text') {
+                            await ShareExportService.copyNotesAsText(toExport);
                             if (context.mounted) {
-                              final box = context.findRenderObject() as RenderBox?;
-                              if (box != null) {
-                                await Share.shareXFiles(
-                                  [XFile(file.path)],
-                                  text: 'Exportación de ChordVault (${toExport.length} notas)',
-                                  sharePositionOrigin: box.localToGlobal(Offset.zero) & box.size,
-                                );
-                              } else {
-                                await Share.shareXFiles(
-                                  [XFile(file.path)],
-                                  text: 'Exportación de ChordVault (${toExport.length} notas)',
-                                );
-                              }
-                              
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('${toExport.length} nota(s) copiadas al portapapeles')),
+                              );
+                            }
+                          } else if (val == 'share_text') {
+                            await ShareExportService.shareNotesAsText(toExport);
+                            ref.read(_homeSelectingProvider.notifier).state = false;
+                            ref.read(_homeSelectedSetProvider.notifier).state = <String>{};
+                          } else if (val == 'file') {
+                            if (context.mounted) {
+                              await ShareExportService.exportAndShareNotes(toExport, context);
                               ref.read(_homeSelectingProvider.notifier).state = false;
                               ref.read(_homeSelectedSetProvider.notifier).state = <String>{};
                             }
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Error al exportar: $e')),
-                              );
-                            }
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error al exportar: $e')),
+                            );
                           }
                         }
                       },
@@ -479,6 +527,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       floatingActionButton: selecting
           ? null
           : FloatingActionButton(
+              tooltip: 'Nueva nota',
               onPressed: () async {
                 final ctrl = TextEditingController();
                 final title = await showDialog<String>(
@@ -522,7 +571,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-final _viewModeProvider = StateProvider<bool>((ref) => true);
 final _searchQueryProvider = StateProvider<String>((ref) => '');
 final _expandedNotesProvider = StateProvider<Set<String>>((ref) => <String>{});
 final _homeSelectingProvider = StateProvider<bool>((ref) => false);
@@ -550,13 +598,14 @@ class _NoteMenu extends ConsumerWidget {
                 ],
               ),
             );
+            if (!context.mounted) return;
             if (newName != null && newName.trim().isNotEmpty) {
               final updated = Note(
                 id: note.id,
                 title: newName.trim(),
                 createdAt: note.createdAt,
                 updatedAt: DateTime.now(),
-                songs: note.songs,
+                songs: [...note.songs],
               );
               ref.read(notesProvider.notifier).upsert(updated);
             }
@@ -567,7 +616,18 @@ class _NoteMenu extends ConsumerWidget {
               title: note.title + ' (copia)',
               createdAt: DateTime.now(),
               updatedAt: DateTime.now(),
-              songs: note.songs,
+              songs: [
+                for (final s in note.songs)
+                  Song(
+                    id: HiveService.newId(),
+                    title: s.title,
+                    blocks: [for (final b in s.blocks) Block(id: HiveService.newId(), type: b.type, content: b.content)],
+                    originalKey: s.originalKey,
+                    tags: List<String>.from(s.tags),
+                    author: s.author,
+                    isFavorite: s.isFavorite,
+                  )
+              ],
             );
             ref.read(notesProvider.notifier).upsert(copy);
             break;
@@ -583,38 +643,36 @@ class _NoteMenu extends ConsumerWidget {
                 ],
               ),
             );
+            if (!context.mounted) return;
             if (confirm == true) {
+              final deleted = note;
               ref.read(notesProvider.notifier).delete(note.id);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('"${deleted.title}" eliminada'),
+                    action: SnackBarAction(
+                      label: 'Deshacer',
+                      onPressed: () => ref.read(notesProvider.notifier).upsert(deleted),
+                    ),
+                  ),
+                );
+              }
             }
             break;
           case 'share':
-            final text = TextFormat.exportNote(note, forSharing: true);
-            await Share.share(text);
+            await ShareExportService.shareNotesAsText([note]);
             break;
           case 'export_text':
-            final text = TextFormat.exportNote(note, forSharing: false);
-            await Clipboard.setData(ClipboardData(text: text));
+            await ShareExportService.copyNotesAsText([note]);
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nota copiada como texto')));
             }
             break;
           case 'export_file':
             try {
-              final jsonStr = NoteFile.exportToJson([note]);
-              final dir = await getTemporaryDirectory();
-              final file = File('${dir.path}/nota_${note.title.replaceAll(' ', '_')}.cvnote');
-              await file.writeAsString(jsonStr);
               if (context.mounted) {
-                final box = context.findRenderObject() as RenderBox?;
-                if (box != null) {
-                  await Share.shareXFiles(
-                    [XFile(file.path)],
-                    text: 'Nota: ${note.title}',
-                    sharePositionOrigin: box.localToGlobal(Offset.zero) & box.size,
-                  );
-                } else {
-                  await Share.shareXFiles([XFile(file.path)], text: 'Nota: ${note.title}');
-                }
+                await ShareExportService.exportAndShareSingleNote(note, context);
               }
             } catch (e) {
               if (context.mounted) {

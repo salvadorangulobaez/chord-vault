@@ -60,16 +60,34 @@ class NoteFile {
     final id = HiveService.newId();
     final createdAtStr = n['createdAt'] as String?;
     final updatedAtStr = n['updatedAt'] as String?;
-    
-    return Note(
-      id: id,
-      title: (n['title'] as String?) ?? 'Nota',
-      createdAt: createdAtStr != null ? DateTime.parse(createdAtStr) : DateTime.now(),
-      updatedAt: updatedAtStr != null ? DateTime.parse(updatedAtStr) : DateTime.now(),
-      songs: songsRaw
-          .map((s) => LibraryFile.songFromMap(s as Map<String, dynamic>))
-          .whereType<Song>()
-          .toList(),
-    );
+    DateTime parseOrNow(String? s) {
+      if (s == null) return DateTime.now();
+      try {
+        return DateTime.parse(s);
+      } catch (_) {
+        return DateTime.now();
+      }
+    }
+
+    try {
+      return Note(
+        id: id,
+        title: (n['title'] as String?) ?? 'Nota',
+        createdAt: parseOrNow(createdAtStr),
+        updatedAt: parseOrNow(updatedAtStr),
+        songs: songsRaw
+            .map((s) {
+              try {
+                return LibraryFile.songFromMap(s as Map<String, dynamic>);
+              } catch (_) {
+                return null;
+              }
+            })
+            .whereType<Song>()
+            .toList(),
+      );
+    } catch (_) {
+      return null;
+    }
   }
 }

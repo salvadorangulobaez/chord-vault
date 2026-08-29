@@ -48,6 +48,12 @@ class LibraryFile {
   static bool areSongsEqual(Song a, Song b) {
     if (a.title != b.title) return false;
     if (a.originalKey != b.originalKey) return false;
+    if (a.author != b.author) return false;
+    if (a.isFavorite != b.isFavorite) return false;
+    if (a.tags.length != b.tags.length) return false;
+    for (int i = 0; i < a.tags.length; i++) {
+      if (a.tags[i] != b.tags[i]) return false;
+    }
     if (a.blocks.length != b.blocks.length) return false;
     for (int i = 0; i < a.blocks.length; i++) {
       if (a.blocks[i].type != b.blocks[i].type) return false;
@@ -71,10 +77,12 @@ class LibraryFile {
 
   static Map<String, dynamic> songToMap(Song song) {
     return {
+      'id': song.id,
       'title': song.title,
       'originalKey': song.originalKey,
       'tags': song.tags,
       'author': song.author,
+      'isFavorite': song.isFavorite,
       'blocks': [
         for (final b in song.blocks)
           {
@@ -87,13 +95,15 @@ class LibraryFile {
 
   static Song? songFromMap(Map<String, dynamic> s) {
     final List<dynamic> blocksRaw = s['blocks'] as List<dynamic>? ?? [];
-    final id = HiveService.newId();
+    final rawId = s['id'] as String?;
+    final id = (rawId != null && rawId.trim().isNotEmpty) ? rawId : HiveService.newId();
     return Song(
       id: id,
       title: (s['title'] as String?) ?? 'Canción',
       originalKey: s['originalKey'] as String?,
       tags: (s['tags'] as List?)?.cast<String>() ?? const [],
       author: s['author'] as String?,
+      isFavorite: s['isFavorite'] as bool? ?? false,
       blocks: [
         for (final br in blocksRaw)
           Block(

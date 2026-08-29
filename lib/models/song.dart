@@ -28,6 +28,10 @@ class Song {
   DateTime? _updatedAt;
 }
 
+/// SongAdapter versionado — typeId 11, 9 campos (0..8).
+/// Campos 5(author)/6(isFavorite)/7(createdAt)/8(updatedAt) tienen
+/// defaults para migración desde cajas antiguas. Si se añaden campos,
+/// usar índices nuevos y mantener compatibilidad en read().
 class SongAdapter extends TypeAdapter<Song> {
   @override
   final int typeId = 11;
@@ -77,7 +81,7 @@ class SongAdapter extends TypeAdapter<Song> {
       ..writeByte(7)
       ..write(obj.createdAt.millisecondsSinceEpoch)
       ..writeByte(8)
-      ..write(DateTime.now().millisecondsSinceEpoch);
+      ..write(obj.updatedAt.millisecondsSinceEpoch);
   }
 }
 

@@ -77,7 +77,9 @@ bool _isSingleChord(String token) {
 }
 
 /// Verifica si un token completo (puede incluir paréntesis y dash) es un acorde.
-bool _looksLikeChordToken(String token) {
+/// Depth guard evita recursión infinita con nesting profundo.
+bool _looksLikeChordToken(String token, [int depth = 0]) {
+  if (depth > 6) return false;
   final trimmed = token.trim();
   if (trimmed.isEmpty) return false;
 
@@ -99,14 +101,14 @@ bool _looksLikeChordToken(String token) {
 
     for (final group in groups) {
       final groupContent = group.group(1)!.trim();
-      if (groupContent.isEmpty || !_looksLikeChordToken(groupContent)) {
+      if (groupContent.isEmpty || !_looksLikeChordToken(groupContent, depth + 1)) {
         return false;
       }
     }
 
     final outside = inner.replaceAll(groupPattern, '').trim();
     if (outside.isEmpty) return true;
-    return _looksLikeChordToken(outside);
+    return _looksLikeChordToken(outside, depth + 1);
   }
 
   // Si contiene espacios (usualmente ocurre porque venía envuelto en paréntesis)
@@ -116,7 +118,7 @@ bool _looksLikeChordToken(String token) {
     for (final part in parts) {
       final p = part.trim();
       if (p.isEmpty) continue;
-      if (_looksLikeChordToken(p)) {
+      if (_looksLikeChordToken(p, depth + 1)) {
         chordParts++;
       } else {
         return false;
@@ -133,7 +135,7 @@ bool _looksLikeChordToken(String token) {
     for (final part in parts) {
       final p = part.trim();
       if (p.isEmpty) continue;
-      if (_looksLikeChordToken(p)) {
+      if (_looksLikeChordToken(p, depth + 1)) {
         chordParts++;
       } else {
         return false;

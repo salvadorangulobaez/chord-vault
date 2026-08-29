@@ -20,7 +20,10 @@ class Block {
   String content;
 }
 
-/// Adapter manual de Hive para Block
+/// Adapter manual de Hive para Block — versionado.
+///
+/// typeId 10 estable desde v1. Campos: 0=id, 1=type.index, 2=content.
+/// Migración futura: añadir campos nuevos con nuevo índice y default en read().
 class BlockAdapter extends TypeAdapter<Block> {
   @override
   final int typeId = 10;

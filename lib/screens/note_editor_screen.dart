@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:share_plus/share_plus.dart';
-
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 
 import '../providers/app_providers.dart';
 import '../models/note.dart';
@@ -14,8 +10,8 @@ import '../services/chords/parser.dart';
 import '../services/chords/transpose.dart';
 import '../services/storage/hive_service.dart';
 import '../services/clipboard/song_clipboard.dart';
+import '../services/io/share_export_service.dart';
 import '../services/io/text_format.dart';
-import '../services/io/note_file.dart';
 import '../utils/title_utils.dart';
 import 'widgets/song_text_editor.dart';
 
@@ -30,25 +26,48 @@ class NoteEditorScreen extends ConsumerStatefulWidget {
 class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   final Map<String, int> _transposeBySong = {}; // songId -> semitonos
   bool _fabMenuOpen = false;
+  TextEditingController? _titleController;
+  String? _titleControllerNoteId;
+
+  @override
+  void dispose() {
+    _titleController?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final notes = ref.watch(notesProvider);
     final settings = ref.watch(settingsProvider);
     final note = notes.firstWhere((n) => n.id == widget.noteId);
+    if (!settings.readOnlyMode) {
+      if (_titleController == null || _titleControllerNoteId != note.id) {
+        _titleController?.dispose();
+        _titleController = TextEditingController(text: note.title);
+        _titleControllerNoteId = note.id;
+      } else if (_titleController!.text != note.title) {
+        // Sync external changes without losing cursor if user is typing
+        final sel = _titleController!.selection;
+        _titleController!.value = TextEditingValue(
+          text: note.title,
+          selection: sel.isValid ? sel : TextSelection.collapsed(offset: note.title.length),
+        );
+      }
+    }
     return Scaffold(
       appBar: AppBar(
         title: settings.readOnlyMode
             ? Text(
                 note.title,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontSize: 16, // Tamaño más pequeño en modo lectura
+                  fontSize: 16,
                 ),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               )
             : TextFormField(
-                initialValue: note.title,
+                key: ValueKey(note.id),
+                controller: _titleController,
                 decoration: const InputDecoration(border: InputBorder.none, hintText: 'Título de la nota'),
                 style: Theme.of(context).textTheme.titleLarge,
                 onChanged: (v) {
@@ -57,7 +76,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                     title: v,
                     createdAt: note.createdAt,
                     updatedAt: DateTime.now(),
-                    songs: note.songs,
+                    songs: [...note.songs],
                   );
                   ref.read(notesProvider.notifier).upsert(updated);
                 },
@@ -372,12 +391,21 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                         builder: (_) => const _LibraryPickerSheet(),
                       );
                       if (picked != null) {
+                        final cloned = Song(
+                          id: HiveService.newId(),
+                          title: picked.title,
+                          blocks: [for (final b in picked.blocks) Block(id: HiveService.newId(), type: b.type, content: b.content)],
+                          originalKey: picked.originalKey,
+                          tags: List<String>.from(picked.tags),
+                          author: picked.author,
+                          isFavorite: picked.isFavorite,
+                        );
                         final updated = Note(
                           id: note.id,
                           title: note.title,
                           createdAt: note.createdAt,
                           updatedAt: DateTime.now(),
-                          songs: [...note.songs, picked],
+                          songs: [...note.songs, cloned],
                         );
                         ref.read(notesProvider.notifier).upsert(updated);
                         setState(() {});
@@ -464,12 +492,21 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                         builder: (_) => const _LibraryPickerSheet(),
                       );
                       if (picked != null) {
+                        final cloned2 = Song(
+                          id: HiveService.newId(),
+                          title: picked.title,
+                          blocks: [for (final b in picked.blocks) Block(id: HiveService.newId(), type: b.type, content: b.content)],
+                          originalKey: picked.originalKey,
+                          tags: List<String>.from(picked.tags),
+                          author: picked.author,
+                          isFavorite: picked.isFavorite,
+                        );
                         final updated = Note(
                           id: note.id,
                           title: note.title,
                           createdAt: note.createdAt,
                           updatedAt: DateTime.now(),
-                          songs: [...note.songs, picked],
+                          songs: [...note.songs, cloned2],
                         );
                         ref.read(notesProvider.notifier).upsert(updated);
                         setState(() {});
@@ -545,8 +582,7 @@ class _SongCard extends StatelessWidget {
                   onSelected: (value) async {
                     switch (value) {
                       case 'export_text':
-                        final text = TextFormat.exportSong(song);
-                        await Clipboard.setData(ClipboardData(text: text));
+                        await ShareExportService.copySongsAsText([song]);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Canción copiada como texto')),
@@ -554,8 +590,7 @@ class _SongCard extends StatelessWidget {
                         }
                         break;
                       case 'share':
-                        final text = TextFormat.exportSong(song);
-                        await Share.share(text);
+                        await ShareExportService.shareSongsAsText([song]);
                         break;
                       case 'copy':
                         onCopy();
@@ -870,15 +905,15 @@ class _ShareNoteSheetState extends State<_ShareNoteSheet> {
                       onPressed: _selectedSongs.isEmpty
                           ? null
                           : () async {
+                              final selected = widget.note.songs.where((s) => _selectedSongs.contains(s.id)).toList();
                               final noteToExport = Note(
                                 id: widget.note.id,
                                 title: widget.note.title,
                                 createdAt: widget.note.createdAt,
                                 updatedAt: widget.note.updatedAt,
-                                songs: widget.note.songs.where((s) => _selectedSongs.contains(s.id)).toList(),
+                                songs: selected,
                               );
-                              final text = TextFormat.exportNote(noteToExport, forSharing: true);
-                              await Share.share(text);
+                              await ShareExportService.shareNotesAsText([noteToExport]);
                             },
                       icon: const Icon(Icons.share),
                       label: const Text('Texto', overflow: TextOverflow.ellipsis),
@@ -890,15 +925,15 @@ class _ShareNoteSheetState extends State<_ShareNoteSheet> {
                       onPressed: _selectedSongs.isEmpty
                           ? null
                           : () async {
+                              final selected = widget.note.songs.where((s) => _selectedSongs.contains(s.id)).toList();
                               final noteToExport = Note(
                                 id: widget.note.id,
                                 title: widget.note.title,
                                 createdAt: widget.note.createdAt,
                                 updatedAt: widget.note.updatedAt,
-                                songs: widget.note.songs.where((s) => _selectedSongs.contains(s.id)).toList(),
+                                songs: selected,
                               );
-                              final text = TextFormat.exportNote(noteToExport, forSharing: false);
-                              await Clipboard.setData(ClipboardData(text: text));
+                              await ShareExportService.copyNotesAsText([noteToExport]);
                               if (!context.mounted) return;
                               Navigator.pop(context);
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copiado al portapapeles')));
@@ -913,28 +948,20 @@ class _ShareNoteSheetState extends State<_ShareNoteSheet> {
                       onPressed: _selectedSongs.isEmpty
                           ? null
                           : () async {
+                              final selected = widget.note.songs.where((s) => _selectedSongs.contains(s.id)).toList();
                               final noteToExport = Note(
                                 id: widget.note.id,
                                 title: widget.note.title,
                                 createdAt: widget.note.createdAt,
                                 updatedAt: widget.note.updatedAt,
-                                songs: widget.note.songs.where((s) => _selectedSongs.contains(s.id)).toList(),
+                                songs: selected,
                               );
                               try {
-                                final jsonStr = NoteFile.exportToJson([noteToExport]);
-                                final dir = await getTemporaryDirectory();
-                                final file = File('${dir.path}/nota_${widget.note.title.replaceAll(' ', '_')}.cvnote');
-                                await file.writeAsString(jsonStr);
-                                if (!context.mounted) return;
-                                final box = context.findRenderObject() as RenderBox?;
-                                if (box != null) {
-                                  await Share.shareXFiles(
-                                    [XFile(file.path)],
-                                    text: 'Nota: ${widget.note.title}',
-                                    sharePositionOrigin: box.localToGlobal(Offset.zero) & box.size,
+                                if (context.mounted) {
+                                  await ShareExportService.exportAndShareSingleNote(
+                                    noteToExport,
+                                    context,
                                   );
-                                } else {
-                                  await Share.shareXFiles([XFile(file.path)], text: 'Nota: ${widget.note.title}');
                                 }
                               } catch (e) {
                                 if (context.mounted) {
