@@ -211,8 +211,8 @@ List<String> _splitTopLevel(String token, String separator) {
 }
 
 String _transposeSpaceSeparated(String inner, int semitones, TransposeOptions options) {
-  final tokens = inner.trim().split(RegExp(r'\s+')).where((t) => t.isNotEmpty);
-  return tokens.map((t) => transposeToken(t, semitones, options)).join(' ');
+  final tokens = parseLineToTokens(inner);
+  return tokens.map((t) => transposeToken(t.raw, semitones, options)).join(' ');
 }
 
 String _transposeParentheticalSegments(String token, int semitones, TransposeOptions options) {

@@ -89,24 +89,7 @@ bool _looksLikeChordToken(String token) {
 
   if (inner.isEmpty) return false;
 
-  // Si contiene '-', verificar que cada parte sea un acorde o vacía
-  // Ejemplos: Am-G, F#5b-F, (A/E-D) -> después de strip: A/E-D
-  if (inner.contains('-')) {
-    final parts = inner.split('-');
-    int chordParts = 0;
-    for (final part in parts) {
-      final p = part.trim();
-      if (p.isEmpty) continue;
-      if (_looksLikeChordToken(p)) {
-        chordParts++;
-      } else {
-        return false;
-      }
-    }
-    return chordParts > 0;
-  }
-
-  // Soporta acordes con grupos parentéticos internos, p.ej. A(C)
+  // Soporta acordes con grupos parentéticos internos, p.ej. A(C) o A(B C)
   if (inner.contains('(') || inner.contains(')')) {
     if (!_hasBalancedParens(inner)) return false;
 
@@ -126,14 +109,69 @@ bool _looksLikeChordToken(String token) {
     return _looksLikeChordToken(outside);
   }
 
+  // Si contiene espacios (usualmente ocurre porque venía envuelto en paréntesis)
+  if (inner.contains(RegExp(r'\s'))) {
+    final parts = inner.split(RegExp(r'\s+'));
+    int chordParts = 0;
+    for (final part in parts) {
+      final p = part.trim();
+      if (p.isEmpty) continue;
+      if (_looksLikeChordToken(p)) {
+        chordParts++;
+      } else {
+        return false;
+      }
+    }
+    return chordParts > 0;
+  }
+
+  // Si contiene '-', verificar que cada parte sea un acorde o vacía
+  // Ejemplos: Am-G, F#5b-F, (A/E-D) -> después de strip: A/E-D
+  if (inner.contains('-')) {
+    final parts = inner.split('-');
+    int chordParts = 0;
+    for (final part in parts) {
+      final p = part.trim();
+      if (p.isEmpty) continue;
+      if (_looksLikeChordToken(p)) {
+        chordParts++;
+      } else {
+        return false;
+      }
+    }
+    return chordParts > 0;
+  }
+
+
+
   // Verificar como acorde simple
   return _isSingleChord(inner);
 }
 
-List<LineToken> parseLineToTokens(String line) {
-  // Split por whitespace (fix: un solo backslash para regex)
-  final parts = line.trimRight().split(RegExp(r'\s+'));
+List<LineToken> parseLineToTokens(String rawLine) {
+  final line = rawLine.trimRight();
+  final parts = <String>[];
+  var start = 0;
+  var depth = 0;
+  for (var i = 0; i < line.length; i++) {
+    final ch = line[i];
+    if (ch == '(') {
+      depth++;
+    } else if (ch == ')') {
+      if (depth > 0) depth--;
+    } else if (depth == 0 && (ch == ' ' || ch == '\t')) {
+      if (start < i) {
+        parts.add(line.substring(start, i));
+      }
+      start = i + 1;
+    }
+  }
+  if (start < line.length) {
+    parts.add(line.substring(start));
+  }
+  
   return parts
+      .map((p) => p.trim())
       .where((p) => p.isNotEmpty)
       .map((p) => LineToken(raw: p, isChord: _looksLikeChordToken(p)))
       .toList();

@@ -1,5 +1,6 @@
 import '../../models/song.dart';
 import '../../models/block.dart';
+import '../../models/note.dart';
 import '../chords/parser.dart';
 
 class TextFormat {
@@ -25,6 +26,28 @@ class TextFormat {
 
   // Exporta una lista de canciones separadas por ---
   static String exportSongs(List<Song> songs) => songs.map(exportSong).join('\n\n---\n\n');
+
+  // Exporta una lista de canciones compactas para compartir en lenguaje natural
+  static String shareSongsAsText(List<Song> songs) => songs.map(exportSong).join('\n');
+
+  // Exporta una nota completa a texto
+  static String exportNote(Note note, {bool forSharing = false}) {
+    final buffer = StringBuffer();
+    buffer.writeln(note.title.toUpperCase());
+    buffer.writeln('=' * note.title.length);
+    buffer.writeln();
+    if (forSharing) {
+      buffer.write(shareSongsAsText(note.songs));
+    } else {
+      buffer.write(exportSongs(note.songs));
+    }
+    return buffer.toString().trimRight();
+  }
+
+  // Exporta varias notas a texto
+  static String exportNotes(List<Note> notes, {bool forSharing = false}) {
+    return notes.map((n) => exportNote(n, forSharing: forSharing)).join(forSharing ? '\n\n' : '\n\n==========\n\n');
+  }
 
   /// Convierte bloques de vuelta a texto editable (para el editor unificado).
   /// Es la operación inversa de _parseSingleSong.

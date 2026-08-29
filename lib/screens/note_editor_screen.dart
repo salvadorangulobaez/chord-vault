@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+
 import '../providers/app_providers.dart';
 import '../models/note.dart';
 import '../models/song.dart';
@@ -12,6 +15,7 @@ import '../services/chords/transpose.dart';
 import '../services/storage/hive_service.dart';
 import '../services/clipboard/song_clipboard.dart';
 import '../services/io/text_format.dart';
+import '../services/io/note_file.dart';
 import '../utils/title_utils.dart';
 import 'widgets/song_text_editor.dart';
 
@@ -88,6 +92,18 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
               tooltip: 'Aumentar fuente',
             ),
           ],
+          if (note.songs.isNotEmpty)
+            IconButton(
+              tooltip: 'Compartir / Exportar',
+              icon: const Icon(Icons.share),
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (_) => _ShareNoteSheet(note: note),
+                );
+              },
+            ),
           IconButton(
             tooltip: settings.readOnlyMode ? 'Modo edición' : 'Modo lectura',
             icon: Icon(settings.readOnlyMode ? Icons.edit : Icons.visibility),
@@ -764,6 +780,178 @@ class _EmptyNotePlaceholder extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ShareNoteSheet extends StatefulWidget {
+  final Note note;
+  const _ShareNoteSheet({required this.note});
+
+  @override
+  State<_ShareNoteSheet> createState() => _ShareNoteSheetState();
+}
+
+class _ShareNoteSheetState extends State<_ShareNoteSheet> {
+  late Set<String> _selectedSongs;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedSongs = widget.note.songs.map((s) => s.id).toSet();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.8,
+      minChildSize: 0.5,
+      maxChildSize: 0.9,
+      builder: (context, controller) {
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Compartir Nota'),
+            actions: [
+              IconButton(
+                onPressed: _selectedSongs.isEmpty && widget.note.songs.isNotEmpty
+                    ? () {
+                        setState(() {
+                          _selectedSongs = widget.note.songs.map((s) => s.id).toSet();
+                        });
+                      }
+                    : () {
+                        setState(() {
+                          if (_selectedSongs.length == widget.note.songs.length) {
+                            _selectedSongs.clear();
+                          } else {
+                            _selectedSongs = widget.note.songs.map((s) => s.id).toSet();
+                          }
+                        });
+                      },
+                icon: Icon(_selectedSongs.length == widget.note.songs.length
+                    ? Icons.deselect
+                    : Icons.select_all),
+                tooltip: _selectedSongs.length == widget.note.songs.length
+                    ? 'Deseleccionar todo'
+                    : 'Seleccionar todo',
+              ),
+            ],
+          ),
+          body: ListView.builder(
+            controller: controller,
+            itemCount: widget.note.songs.length,
+            itemBuilder: (context, index) {
+              final song = widget.note.songs[index];
+              return CheckboxListTile(
+                value: _selectedSongs.contains(song.id),
+                onChanged: (val) {
+                  setState(() {
+                    if (val == true) {
+                      _selectedSongs.add(song.id);
+                    } else {
+                      _selectedSongs.remove(song.id);
+                    }
+                  });
+                },
+                title: Text(song.title),
+                subtitle: Text(song.originalKey ?? ''),
+              );
+            },
+          ),
+          bottomNavigationBar: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _selectedSongs.isEmpty
+                          ? null
+                          : () async {
+                              final noteToExport = Note(
+                                id: widget.note.id,
+                                title: widget.note.title,
+                                createdAt: widget.note.createdAt,
+                                updatedAt: widget.note.updatedAt,
+                                songs: widget.note.songs.where((s) => _selectedSongs.contains(s.id)).toList(),
+                              );
+                              final text = TextFormat.exportNote(noteToExport, forSharing: true);
+                              await Share.share(text);
+                            },
+                      icon: const Icon(Icons.share),
+                      label: const Text('Texto', overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _selectedSongs.isEmpty
+                          ? null
+                          : () async {
+                              final noteToExport = Note(
+                                id: widget.note.id,
+                                title: widget.note.title,
+                                createdAt: widget.note.createdAt,
+                                updatedAt: widget.note.updatedAt,
+                                songs: widget.note.songs.where((s) => _selectedSongs.contains(s.id)).toList(),
+                              );
+                              final text = TextFormat.exportNote(noteToExport, forSharing: false);
+                              await Clipboard.setData(ClipboardData(text: text));
+                              if (!context.mounted) return;
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copiado al portapapeles')));
+                            },
+                      icon: const Icon(Icons.copy),
+                      label: const Text('Copiar', overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _selectedSongs.isEmpty
+                          ? null
+                          : () async {
+                              final noteToExport = Note(
+                                id: widget.note.id,
+                                title: widget.note.title,
+                                createdAt: widget.note.createdAt,
+                                updatedAt: widget.note.updatedAt,
+                                songs: widget.note.songs.where((s) => _selectedSongs.contains(s.id)).toList(),
+                              );
+                              try {
+                                final jsonStr = NoteFile.exportToJson([noteToExport]);
+                                final dir = await getTemporaryDirectory();
+                                final file = File('${dir.path}/nota_${widget.note.title.replaceAll(' ', '_')}.cvnote');
+                                await file.writeAsString(jsonStr);
+                                if (!context.mounted) return;
+                                final box = context.findRenderObject() as RenderBox?;
+                                if (box != null) {
+                                  await Share.shareXFiles(
+                                    [XFile(file.path)],
+                                    text: 'Nota: ${widget.note.title}',
+                                    sharePositionOrigin: box.localToGlobal(Offset.zero) & box.size,
+                                  );
+                                } else {
+                                  await Share.shareXFiles([XFile(file.path)], text: 'Nota: ${widget.note.title}');
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al exportar: $e')));
+                                }
+                              }
+                            },
+                      icon: const Icon(Icons.file_download),
+                      label: const Text('Archivo', overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

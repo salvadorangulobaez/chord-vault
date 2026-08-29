@@ -1,13 +1,70 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'dart:io';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+
 import '../providers/app_providers.dart';
 import '../models/note.dart';
 import '../services/storage/hive_service.dart';
+import '../services/io/text_format.dart';
+import '../services/io/note_file.dart';
 import '../utils/title_utils.dart';
 import 'note_editor_screen.dart';
 import 'library_screen.dart';
 import 'help_screen.dart';
+
+Future<void> _importNoteFromFile(BuildContext context, WidgetRef ref) async {
+  try {
+    final result = await FilePicker.platform.pickFiles(type: FileType.any);
+    if (result == null || result.files.isEmpty) return;
+
+    final path = result.files.single.path;
+    if (path == null) return;
+
+    if (context.mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    try {
+      final file = File(path);
+      final jsonStr = await file.readAsString();
+      final importedNotes = NoteFile.importFromJson(jsonStr);
+      
+      for (final note in importedNotes) {
+        ref.read(notesProvider.notifier).upsert(note);
+      }
+      
+      if (context.mounted) {
+        Navigator.pop(context); // close dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Importadas ${importedNotes.length} notas.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // close dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al importar archivo: $e')),
+        );
+      }
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al abrir archivo: $e')),
+      );
+    }
+  }
+}
+
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -37,22 +94,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final sorted = [...filtered]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     return Scaffold(
       appBar: AppBar(
-        title: SizedBox(
-          height: 40,
-          child: TextField(
-            decoration: InputDecoration(
-              hintText: 'Buscar notas y canciones',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: query.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () => ref.read(_searchQueryProvider.notifier).state = '',
-                    )
-                  : null,
-            ),
-            onChanged: (v) => ref.read(_searchQueryProvider.notifier).state = v,
-          ),
-        ),
+        title: const Text('Mis Notas'),
         actions: [
           if (selecting)
             IconButton(
@@ -71,6 +113,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpScreen()));
               },
             ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.file_download),
+              tooltip: 'Importar',
+              onSelected: (val) async {
+                if (val == 'file') {
+                  await _importNoteFromFile(context, ref);
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'file', child: Text('Importar desde archivo (.cvnote)')),
+              ],
+            ),
             IconButton(
               tooltip: 'Biblioteca',
               icon: const Icon(Icons.library_music),
@@ -86,34 +140,57 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ],
         ],
       ),
-      body: sorted.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.queue_music,
-                    size: 80,
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'No hay notas',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Toca el botón + para crear tu primera nota',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'Buscar notas y canciones...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: query.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () => ref.read(_searchQueryProvider.notifier).state = '',
+                      )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
               ),
-            )
-          : viewAsGrid
+              onChanged: (v) => ref.read(_searchQueryProvider.notifier).state = v,
+            ),
+          ),
+          Expanded(
+            child: sorted.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.queue_music,
+                          size: 80,
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          query.isNotEmpty ? 'No hay resultados' : 'No hay notas',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          query.isNotEmpty ? 'Prueba con otra búsqueda' : 'Toca el botón + para crear tu primera nota',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : viewAsGrid
               ? Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: GridView.builder(
@@ -298,6 +375,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 );
               },
             ),
+          ),
+        ],
+      ),
       bottomNavigationBar: selecting
           ? SafeArea(
               child: Padding(
@@ -331,6 +411,66 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       icon: const Icon(Icons.delete),
                       label: const Text('Eliminar seleccionadas'),
                     ),
+                    const SizedBox(width: 12),
+                    PopupMenuButton<String>(
+                      enabled: selectedSet.isNotEmpty,
+                      icon: const Icon(Icons.share),
+                      tooltip: 'Compartir / Exportar',
+                      onSelected: (val) async {
+                        final toExport = notes.where((n) => selectedSet.contains(n.id)).toList();
+                        if (val == 'text') {
+                          final text = TextFormat.exportNotes(toExport, forSharing: false);
+                          await Clipboard.setData(ClipboardData(text: text));
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('${toExport.length} nota(s) copiadas al portapapeles')),
+                            );
+                          }
+                        } else if (val == 'share_text') {
+                          final text = TextFormat.exportNotes(toExport, forSharing: true);
+                          await Share.share(text);
+                          ref.read(_homeSelectingProvider.notifier).state = false;
+                          ref.read(_homeSelectedSetProvider.notifier).state = <String>{};
+                        } else if (val == 'file') {
+                          try {
+                            final jsonStr = NoteFile.exportToJson(toExport);
+                            final dir = await getTemporaryDirectory();
+                            final file = File('${dir.path}/exportacion_notas.cvnote');
+                            await file.writeAsString(jsonStr);
+                            
+                            if (context.mounted) {
+                              final box = context.findRenderObject() as RenderBox?;
+                              if (box != null) {
+                                await Share.shareXFiles(
+                                  [XFile(file.path)],
+                                  text: 'Exportación de ChordVault (${toExport.length} notas)',
+                                  sharePositionOrigin: box.localToGlobal(Offset.zero) & box.size,
+                                );
+                              } else {
+                                await Share.shareXFiles(
+                                  [XFile(file.path)],
+                                  text: 'Exportación de ChordVault (${toExport.length} notas)',
+                                );
+                              }
+                              
+                              ref.read(_homeSelectingProvider.notifier).state = false;
+                              ref.read(_homeSelectedSetProvider.notifier).state = <String>{};
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error al exportar: $e')),
+                              );
+                            }
+                          }
+                        }
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'text', child: Text('Copiar como texto')),
+                        PopupMenuItem(value: 'share_text', child: Text('Compartir como texto')),
+                        PopupMenuItem(value: 'file', child: Text('Exportar como archivo (.cvnote)')),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -339,21 +479,42 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       floatingActionButton: selecting
           ? null
           : FloatingActionButton(
-              onPressed: () {
-                final id = HiveService.newId();
-                final note = Note(
-                  id: id,
-                  title: 'Nota ${notes.length + 1}',
-                  createdAt: DateTime.now(),
-                  updatedAt: DateTime.now(),
-                );
-                ref.read(notesProvider.notifier).upsert(note);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => NoteEditorScreen(noteId: id),
+              onPressed: () async {
+                final ctrl = TextEditingController();
+                final title = await showDialog<String>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Nueva Nota'),
+                    content: TextField(
+                      controller: ctrl,
+                      autofocus: true,
+                      decoration: const InputDecoration(hintText: 'Título de la nota'),
+                      textCapitalization: TextCapitalization.sentences,
+                    ),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+                      TextButton(onPressed: () => Navigator.pop(context, ctrl.text), child: const Text('Crear')),
+                    ],
                   ),
                 );
+                if (title != null && title.trim().isNotEmpty) {
+                  final id = HiveService.newId();
+                  final note = Note(
+                    id: id,
+                    title: title.trim(),
+                    createdAt: DateTime.now(),
+                    updatedAt: DateTime.now(),
+                  );
+                  ref.read(notesProvider.notifier).upsert(note);
+                  if (context.mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => NoteEditorScreen(noteId: id),
+                      ),
+                    );
+                  }
+                }
               },
               child: const Icon(Icons.add),
             ),
@@ -426,9 +587,48 @@ class _NoteMenu extends ConsumerWidget {
               ref.read(notesProvider.notifier).delete(note.id);
             }
             break;
+          case 'share':
+            final text = TextFormat.exportNote(note, forSharing: true);
+            await Share.share(text);
+            break;
+          case 'export_text':
+            final text = TextFormat.exportNote(note, forSharing: false);
+            await Clipboard.setData(ClipboardData(text: text));
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nota copiada como texto')));
+            }
+            break;
+          case 'export_file':
+            try {
+              final jsonStr = NoteFile.exportToJson([note]);
+              final dir = await getTemporaryDirectory();
+              final file = File('${dir.path}/nota_${note.title.replaceAll(' ', '_')}.cvnote');
+              await file.writeAsString(jsonStr);
+              if (context.mounted) {
+                final box = context.findRenderObject() as RenderBox?;
+                if (box != null) {
+                  await Share.shareXFiles(
+                    [XFile(file.path)],
+                    text: 'Nota: ${note.title}',
+                    sharePositionOrigin: box.localToGlobal(Offset.zero) & box.size,
+                  );
+                } else {
+                  await Share.shareXFiles([XFile(file.path)], text: 'Nota: ${note.title}');
+                }
+              }
+            } catch (e) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al exportar: $e')));
+              }
+            }
+            break;
         }
       },
       itemBuilder: (context) => const [
+        PopupMenuItem(value: 'share', child: Text('Compartir como texto')),
+        PopupMenuItem(value: 'export_text', child: Text('Copiar como texto')),
+        PopupMenuItem(value: 'export_file', child: Text('Exportar como archivo (.cvnote)')),
+        PopupMenuDivider(),
         PopupMenuItem(value: 'rename', child: Text('Renombrar')), 
         PopupMenuItem(value: 'duplicate', child: Text('Duplicar')), 
         PopupMenuItem(value: 'delete', child: Text('Eliminar')), 

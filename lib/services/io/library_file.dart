@@ -22,7 +22,7 @@ class LibraryFile {
       'format': 'chordvault_library',
       'version': 2,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
-      'songs': songs.map(_songToMap).toList(),
+      'songs': songs.map(songToMap).toList(),
     };
     return const JsonEncoder.withIndent('  ').convert(map);
   }
@@ -38,7 +38,7 @@ class LibraryFile {
     }
     final songsRaw = map['songs'] as List<dynamic>? ?? [];
     return songsRaw
-        .map((s) => _songFromMap(s as Map<String, dynamic>))
+        .map((s) => songFromMap(s as Map<String, dynamic>))
         .whereType<Song>()
         .toList();
   }
@@ -69,7 +69,7 @@ class LibraryFile {
 
   // --- Serialización interna ---
 
-  static Map<String, dynamic> _songToMap(Song song) {
+  static Map<String, dynamic> songToMap(Song song) {
     return {
       'title': song.title,
       'originalKey': song.originalKey,
@@ -85,7 +85,7 @@ class LibraryFile {
     };
   }
 
-  static Song? _songFromMap(Map<String, dynamic> s) {
+  static Song? songFromMap(Map<String, dynamic> s) {
     final List<dynamic> blocksRaw = s['blocks'] as List<dynamic>? ?? [];
     final id = HiveService.newId();
     return Song(

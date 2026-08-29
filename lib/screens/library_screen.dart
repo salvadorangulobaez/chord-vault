@@ -376,6 +376,11 @@ class LibraryScreen extends ConsumerWidget {
                             SnackBar(content: Text('${toExport.length} canción(es) copiadas al portapapeles')),
                           );
                         }
+                      } else if (val == 'share_text') {
+                        final text = TextFormat.shareSongsAsText(toExport);
+                        await Share.share(text);
+                        ref.read(_libSelectingProvider.notifier).state = false;
+                        ref.read(_libSelectedSetProvider.notifier).state = <String>{};
                       } else if (val == 'file') {
                         try {
                           final jsonStr = LibraryFile.exportToJson(toExport);
@@ -412,6 +417,7 @@ class LibraryScreen extends ConsumerWidget {
                     },
                     itemBuilder: (_) => const [
                       PopupMenuItem(value: 'text', child: Text('Copiar como texto')),
+                      PopupMenuItem(value: 'share_text', child: Text('Compartir como texto')),
                       PopupMenuItem(value: 'file', child: Text('Exportar como archivo (.chordvault)')),
                     ],
                   ),
@@ -543,13 +549,31 @@ class _ImportSongsSheetState extends ConsumerState<_ImportSongsSheet> {
                                 : () async {
                                     try {
                                       final songs = TextFormat.parseSongs(_textController.text);
-                                      for (final song in songs) {
-                                        ref.read(libraryProvider.notifier).upsert(song);
+                                      final existingSongs = ref.read(libraryProvider);
+                                      int added = 0;
+                                      int skipped = 0;
+
+                                      for (final newSong in songs) {
+                                        final newSongText = TextFormat.exportSong(newSong);
+                                        final isDuplicate = existingSongs.any((s) {
+                                          if (s.title != newSong.title || s.originalKey != newSong.originalKey) return false;
+                                          return TextFormat.exportSong(s) == newSongText;
+                                        });
+
+                                        if (isDuplicate) {
+                                          skipped++;
+                                        } else {
+                                          ref.read(libraryProvider.notifier).upsert(newSong);
+                                          added++;
+                                        }
                                       }
+
                                       if (mounted) {
                                         Navigator.pop(context);
                                         ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('${songs.length} canción(es) importada(s)')),
+                                          SnackBar(
+                                            content: Text('$added canción(es) importada(s), $skipped omitida(s) (ya existían exactas)'),
+                                          ),
                                         );
                                       }
                                     } catch (e) {
